@@ -124,20 +124,19 @@
       <form id="loginForm" class="space-y-4" onsubmit="Auth.login(event)">
         <label class="block"><span class="block mb-1 font-bold">メールアドレス</span>
           <input class="field" type="email" name="email" autocomplete="email" required></label>
-        <label class="block"><span class="block mb-1 font-bold">パスワード</span>
+        <label class="block"><span class="block mb-1 font-bold">パスワード（初回はメールの仮パスワード）</span>
           <span class="relative block"><input class="field pr-14" type="password" name="password" autocomplete="current-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
         <button class="btn-main w-full" type="submit">ログイン</button>
         <button type="button" class="w-full text-tide underline underline-offset-4 py-2" onclick="UI.openModal('forgotModal')">パスワードをお忘れの方</button>
       </form>
 
       <form id="registerForm" class="space-y-4 hidden" onsubmit="Auth.register(event)">
+        <p class="bg-sparkSoft rounded-xl p-3 leading-relaxed">登録したメールアドレスに<strong>仮パスワード</strong>を送ります。仮パスワードでログインしたあと、ご自身のパスワードに変更してください。</p>
         <label class="block"><span class="block mb-1 font-bold">表示名</span>
           <input class="field" type="text" name="displayName" maxlength="30" autocomplete="nickname" required></label>
         <label class="block"><span class="block mb-1 font-bold">メールアドレス</span>
           <input class="field" type="email" name="email" autocomplete="email" required></label>
-        <label class="block"><span class="block mb-1 font-bold">パスワード（8文字以上）</span>
-          <span class="relative block"><input class="field pr-14" type="password" name="password" minlength="8" autocomplete="new-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
-        <button class="btn-main w-full" type="submit">登録してはじめる</button>
+        <button class="btn-main w-full" type="submit">仮パスワードを受け取る</button>
       </form>
     </div>
   </div>
@@ -344,7 +343,7 @@
 <div id="pwModal" class="hidden fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
   <form class="sheet bg-paper w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4" onsubmit="Auth.changePassword(event)">
     <h3 class="text-xl font-black">新しいパスワードの設定</h3>
-    <p id="pwForcedMsg" class="hidden bg-sparkSoft rounded-xl p-3">仮パスワードでログインしています。続けるには新しいパスワードを設定してください。</p>
+    <p id="pwForcedMsg" class="hidden bg-sparkSoft rounded-xl p-3">仮パスワードでログインしています。続けるには、ご自身で決めた新しいパスワードを設定してください。</p>
     <label class="block"><span class="block mb-1 font-bold">現在のパスワード</span>
       <span class="relative block"><input class="field pr-14" type="password" name="currentPassword" autocomplete="current-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
     <label class="block"><span class="block mb-1 font-bold">新しいパスワード（8文字以上）</span>
@@ -529,14 +528,17 @@ const Auth = {
   async register(ev) {
     ev.preventDefault();
     const f = ev.target;
-    UI.loading(true, '登録しています…');
+    UI.loading(true, '仮パスワードを送っています…');
     try {
-      const r = await api('register', { email: f.email.value, displayName: f.displayName.value, password: f.password.value }, { auth: false });
-      this.save(r.token, r.user);
+      const r = await api('register', { email: f.email.value, displayName: f.displayName.value }, { auth: false });
       f.reset();
-      UI.toast('登録しました。確認メールを送りました。', 'success');
-      App.enter();
-    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+      this.show('login');
+      const lf = $('loginForm');
+      lf.email.value = r.email;
+      lf.password.value = '';
+      lf.password.focus();
+      UI.toast(r.message, 'success', 7000);
+    } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
   },
   async forgot(ev) {
     ev.preventDefault();
