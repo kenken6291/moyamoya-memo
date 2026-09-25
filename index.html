@@ -157,16 +157,22 @@
         <h2 class="text-2xl font-black mt-2 mb-3">なんだっけ…？</h2>
 
         <div class="fogcard p-4">
-          <div id="voiceStatus" class="hidden mb-3 flex items-center gap-3 rounded-2xl bg-[#FBE9EB] px-4 py-3" role="status">
-            <span class="pulse-dot shrink-0"></span>
-            <span class="font-bold text-rec">聞き取り中</span>
-            <span class="wave flex items-center h-5" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
-            <button class="ml-auto font-bold text-rec underline underline-offset-4" onclick="Voice.stop()">止める</button>
+          <div id="voiceStatus" class="hidden mb-3 rounded-2xl bg-[#FBE9EB] px-4 py-3" role="status">
+            <div class="flex items-center gap-3">
+              <span class="pulse-dot shrink-0"></span>
+              <span class="font-bold text-rec">聞き取り中</span>
+              <span class="wave flex items-center h-5" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+              <button class="ml-auto font-bold text-rec underline underline-offset-4 min-h-[44px]" onclick="Voice.stop()">止めて整理</button>
+            </div>
+            <p id="voiceLive" class="mt-2 text-mute leading-relaxed min-h-[1.5rem]">話しかけてください。止めるとAIが言葉を整えて入力欄に入れます。</p>
           </div>
 
           <label for="clues" class="sr-only">手がかり</label>
           <textarea id="clues" class="clue-area w-full bg-transparent outline-none text-lg" placeholder="覚えている断片をそのまま。&#10;例：えーっと、昔の刑事ドラマに出てた、四角い顔の俳優…"></textarea>
-          <p id="interim" class="text-mute text-base min-h-[1.5rem]" aria-live="polite"></p>
+          <details id="voiceRawBox" class="hidden mt-1 text-sm text-mute">
+            <summary class="cursor-pointer py-2">声をAIで整理して入力しました（聞き取った原文を見る）</summary>
+            <p id="voiceRawText" class="whitespace-pre-wrap leading-relaxed pb-1"></p>
+          </details>
 
           <div id="attachList" class="flex flex-wrap gap-3 mt-2"></div>
         </div>
@@ -591,10 +597,13 @@ const Auth = {
 /* ============================ 音声入力 ============================ */
 const Voice = {
   SR: window.SpeechRecognition || window.webkitSpeechRecognition,
-  rec: null, listening: false, target: null, btnId: '', scope: '', base: '',
+  rec: null, listening: false, target: null, btnId: '', scope: '',
+  segments: [], interim: '', busy: null,
+
   toggle(targetId, btnId, scope) {
+    if (this.busy) return;
     if (this.listening && this.btnId === btnId) return this.stop();
-    if (this.listening) this.stop();
+    if (this.listening) this.cancel();
     this.start(targetId, btnId, scope);
   },
   start(targetId, btnId, scope) {
@@ -603,15 +612,46 @@ const Voice = {
       return;
     }
     this.target = $(targetId); this.btnId = btnId; this.scope = scope;
+    this.segments = []; this.interim = '';
     this.listening = true;
-    this._resetBase();
     this._spawn();
     this._ui(true);
+    this._live();
   },
-  _resetBase() {
-    const v = this.target.value;
-    this.base = v && !/[\s、。\n]$/.test(v) ? v + '、' : v;
+
+  /**
+   * 確定結果の重複除去。
+   * Android版Chromeは「諫早」「諫早出身の」「諫早出身の体操の」…と途中経過を
+   * 確定として返すことがあるため、前の断片を含む新しい断片は置き換える。
+   */
+  _add(t) {
+    t = String(t || '').trim();
+    if (!t) return;
+    const segs = this.segments;
+    const norm = x => x.replace(/[\s、。,.]/g, '');
+    const nt = norm(t);
+    if (!nt) return;
+    for (let i = segs.length - 1; i >= Math.max(0, segs.length - 3); i--) {
+      const ns = norm(segs[i]);
+      if (ns === nt || ns.includes(nt)) return;          // 既出・部分重複は捨てる
+      if (nt.startsWith(ns) || nt.includes(ns)) {          // 伸びた版で置き換え
+        segs.splice(i, 1);
+      }
+    }
+    segs.push(t);
   },
+  rawText() {
+    const all = this.segments.slice();
+    if (this.interim.trim()) all.push(this.interim.trim());
+    return all.join(' ').trim();
+  },
+  _live() {
+    const el = $(this.scope === 'refine' ? 'refineVoiceLive' : 'voiceLive');
+    if (!el) return;
+    const t = this.rawText();
+    el.textContent = t || (this.scope === 'main' ? '話しかけてください。止めるとAIが言葉を整えて入力欄に入れます。' : '話しかけてください。');
+  },
+
   _spawn() {
     const rec = new this.SR();
     rec.lang = 'ja-JP';
@@ -622,42 +662,76 @@ const Voice = {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) this.base += t + '、';
+        if (e.results[i].isFinal) this._add(t);
         else interim += t;
       }
-      this.target.value = this.base + interim;
-      this.target.scrollTop = this.target.scrollHeight;
-      if (this.scope === 'main') $('interim').textContent = interim ? '…' + interim : '';
+      this.interim = interim;
       Memo.markMethod(this.scope, '音声');
+      this._live();
     };
     rec.onerror = e => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         UI.toast('マイクの使用が許可されていません。ブラウザの設定でマイクを許可してください。', 'error', 5000);
-        this.stop();
+        this.cancel();
       } else if (e.error === 'network') {
         UI.toast('音声認識には通信が必要です。', 'error');
         this.stop();
       } // no-speech / aborted は onend で再開
     };
     rec.onend = () => {
+      // 途中経過のまま切れた分を確定として残す
+      if (this.interim) { this._add(this.interim); this.interim = ''; }
       // Android/Chrome は無音で自動終了するため、トグルONの間は再開する
       if (this.listening) {
-        this._resetBase();
         try { rec.start(); } catch (err) { setTimeout(() => this.listening && this._spawn(), 250); }
       }
     };
     this.rec = rec;
-    try { rec.start(); } catch (err) { UI.toast('音声入力を開始できませんでした。', 'error'); this.stop(); }
+    try { rec.start(); } catch (err) { UI.toast('音声入力を開始できませんでした。', 'error'); this.cancel(); }
   },
-  stop() {
-    if (!this.listening) return;
+
+  _halt() {
     this.listening = false;
     try { this.rec && this.rec.stop(); } catch (e) { /* noop */ }
     this.rec = null;
-    if (this.target) this.target.value = this.target.value.replace(/、$/, '');
-    $('interim').textContent = '';
     this._ui(false);
   },
+
+  /** 録音を止め、聞き取った文をGeminiで整理して入力欄へ入れる（完了まで待てる） */
+  stop() {
+    if (this.busy) return this.busy;
+    if (!this.listening) return Promise.resolve();
+    this._halt();
+    const raw = this.rawText();
+    this.segments = []; this.interim = '';
+    if (!raw) return Promise.resolve();
+    const target = this.target, scope = this.scope;
+    this.busy = (async () => {
+      UI.loading(true, '聞き取った言葉を整理しています…');
+      let cleaned = raw;
+      try {
+        const r = await api('cleanVoice', { text: raw, context: target.value.trim() }, { timeout: 45000 });
+        cleaned = (r.cleaned || '').trim() || raw;
+      } catch (e) {
+        UI.toast('AIでの整理に失敗したため、聞き取った文をそのまま入れました。', 'error', 4500);
+      } finally {
+        UI.loading(false);
+      }
+      const cur = target.value.trim();
+      target.value = cur ? cur + (/[、。\n]$/.test(cur) ? '' : '\n') + cleaned : cleaned;
+      target.scrollTop = target.scrollHeight;
+      Memo.addVoiceRaw(scope, raw);
+    })().finally(() => { this.busy = null; });
+    return this.busy;
+  },
+
+  /** 録音を破棄して止める（ログアウト時など） */
+  cancel() {
+    if (!this.listening) return;
+    this._halt();
+    this.segments = []; this.interim = '';
+  },
+
   _ui(on) {
     const btn = $(this.btnId);
     if (btn) {
@@ -842,6 +916,8 @@ S.methods = new Set();
 S.situation = '';
 S.current = null;
 S.refineMethods = new Set();
+S.voiceRaw = [];
+S.refineVoiceRaw = [];
 
 const Memo = {
   init() {
@@ -861,6 +937,12 @@ const Memo = {
     $('fileInput').addEventListener('change', e => this.onFiles(e.target));
   },
   markMethod(scope, m) { (scope === 'refine' ? S.refineMethods : S.methods).add(m); },
+  addVoiceRaw(scope, raw) {
+    if (scope === 'refine') { S.refineVoiceRaw.push(raw); return; }
+    S.voiceRaw.push(raw);
+    $('voiceRawText').textContent = S.voiceRaw.join('\n');
+    $('voiceRawBox').classList.remove('hidden');
+  },
   async onFiles(input) {
     const files = [...input.files];
     input.value = '';
@@ -896,7 +978,7 @@ const Memo = {
       </figure>`).join('');
   },
   async infer() {
-    Voice.stop();
+    await Voice.stop();
     const clues = $('clues').value.trim();
     if (!clues && !S.attach.length) return UI.toast('手がかりを1つ入力してください（文字・声・手書き・写真）。', 'error');
     if (clues && !S.methods.has('音声') && !S.methods.has('テキスト')) S.methods.add('テキスト');
@@ -912,7 +994,7 @@ const Memo = {
     UI.loading(true, msgs[0], msgs);
     $('inferBtn').disabled = true;
     try {
-      const r = await api('infer', { clues, situation: S.situation, occurredAt: occ, inputMethods: [...S.methods], images });
+      const r = await api('infer', { clues, situation: S.situation, occurredAt: occ, inputMethods: [...S.methods], images, voiceRaw: S.voiceRaw.join('\n') });
       S.current = r.record;
       S.records.unshift(r.record);
       if (r.aiError) UI.toast('記録は保存しましたが、AIの推論に失敗しました: ' + r.aiError, 'error', 6000);
@@ -927,7 +1009,9 @@ const Memo = {
   },
   resetEntry() {
     $('clues').value = '';
-    $('interim').textContent = '';
+    S.voiceRaw = [];
+    $('voiceRawText').textContent = '';
+    $('voiceRawBox').classList.add('hidden');
     S.attach = []; S.methods = new Set(); S.situation = '';
     document.querySelectorAll('[data-sit]').forEach(x => x.setAttribute('aria-pressed', 'false'));
     $('occurredAt').value = localNow();
@@ -939,7 +1023,7 @@ const Memo = {
     $('resolvedPanel').classList.toggle('hidden', which !== 'resolved');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   },
-  backToEntry() { Voice.stop(); this.panel('entry'); },
+  backToEntry() { Voice.cancel(); this.panel('entry'); },
   candidateHtml(rec, pickFn) {
     const cands = rec.candidates || [];
     if (!cands.length) return '<p class="text-mute">候補を出せませんでした。手がかりを足して、もう一度聞いてみてください。</p>';
@@ -958,6 +1042,7 @@ const Memo = {
   },
   showResult(rec, inf) {
     S.refineMethods = new Set();
+    S.refineVoiceRaw = [];
     const ia = (inf && inf.imageAnalysis) || [];
     $('resultBody').innerHTML = `
       ${rec.aiInterpretation ? `<p class="text-lg leading-relaxed mb-3">${esc(rec.aiInterpretation)}</p>` : ''}
@@ -969,7 +1054,7 @@ const Memo = {
 
       <div class="fogcard p-4 mt-4">
         <p class="font-bold mb-2">手がかりを足してもう一度</p>
-        <div id="refineVoiceStatus" class="hidden mb-2 flex items-center gap-3 rounded-xl bg-[#FBE9EB] px-3 py-2"><span class="pulse-dot"></span><span class="font-bold text-rec">聞き取り中</span></div>
+        <div id="refineVoiceStatus" class="hidden mb-2 rounded-xl bg-[#FBE9EB] px-3 py-2"><div class="flex items-center gap-3"><span class="pulse-dot"></span><span class="font-bold text-rec">聞き取り中</span></div><p id="refineVoiceLive" class="mt-1 text-mute leading-relaxed min-h-[1.5rem]"></p></div>
         <textarea id="refineText" class="field clue-area !min-h-[5rem]" placeholder="例：主題歌が有名だった、苗字は「た」で始まる気がする"></textarea>
         <div class="grid grid-cols-[auto_1fr] gap-2 mt-2">
           <button class="mbtn !min-h-[52px] !flex-row !px-4" id="refineMic" aria-pressed="false" onclick="Voice.toggle('refineText','refineMic','refine')">
@@ -993,13 +1078,13 @@ const Memo = {
     this.panel('result');
   },
   async refine() {
-    Voice.stop();
+    await Voice.stop();
     const extra = $('refineText').value.trim();
     if (!extra) return UI.toast('追加の手がかりを入力してください。', 'error');
     if (!S.refineMethods.size) S.refineMethods.add('テキスト');
     UI.loading(true, '手がかりを足して考え直しています…', ['手がかりを足して考え直しています…', '候補を入れ替えています…']);
     try {
-      const r = await api('refine', { recordId: S.current.recordId, extraClues: extra, inputMethods: [...S.refineMethods] });
+      const r = await api('refine', { recordId: S.current.recordId, extraClues: extra, inputMethods: [...S.refineMethods], voiceRaw: S.refineVoiceRaw.join('\n') });
       S.current = r.record;
       History.replace(r.record);
       this.showResult(r.record, r.inference);
@@ -1015,7 +1100,7 @@ const Memo = {
     return this.doResolve(S.current.recordId, v, '自力');
   },
   async doResolve(recordId, answer, by, fromDetail) {
-    Voice.stop();
+    Voice.cancel();
     UI.loading(true, '記録を分類しています…');
     try {
       const r = await api('resolve', { recordId, answer, resolvedBy: by });
@@ -1043,7 +1128,7 @@ const Memo = {
     this.panel('resolved');
   },
   later() {
-    Voice.stop();
+    Voice.cancel();
     UI.toast('未解決として保存しました。履歴からいつでも解決できます。');
     this.panel('entry');
   },
@@ -1320,7 +1405,7 @@ const App = {
     if (S.user.mustChangePassword) Auth.openChangePassword(true);
   },
   leave() {
-    Voice.stop();
+    Voice.cancel();
     document.querySelectorAll('[role="dialog"]').forEach(m => m.classList.add('hidden'));
     document.body.style.overflow = '';
     $('appView').classList.add('hidden');
