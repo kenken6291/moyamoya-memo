@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2F5D6B">
+<title>もやもやメモ ― 思い出せないを記録する</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  if (window.tailwind) tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          fog: '#E6ECEF',
+          paper: '#F8FAFB',
+          ink: '#1C2833',
+          mute: '#5E6B75',
+          tide: '#2F5D6B',
+          tideDark: '#244956',
+          spark: '#F2B134',
+          sparkSoft: '#FCEFCB',
+          rec: '#D1495B',
+        },
+        fontFamily: { maru: ['"Zen Maru Gothic"', '"Hiragino Maru Gothic ProN"', '"BIZ UDPGothic"', 'sans-serif'] },
+      },
+    },
+  };
+</script>
+<style>
+  :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { font-size: 17px; }
+  body { background: #E6ECEF; color: #1C2833; font-family: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", sans-serif; -webkit-tap-highlight-color: transparent; }
+  button, input, select, textarea { font: inherit; }
+  :focus-visible { outline: 3px solid #F2B134; outline-offset: 2px; }
+  .hidden-force { display: none !important; }
+
+  /* 入力欄：霧の中から言葉を探すカード */
+  .fogcard { background: #F8FAFB; border-radius: 22px; box-shadow: 0 1px 0 #d5dde2, 0 10px 30px -18px rgba(28,40,51,.45); }
+  .clue-area { min-height: 7.5rem; resize: vertical; line-height: 1.75; }
+  .clue-area::placeholder { color: #8A969F; }
+
+  /* 入力手段ボタン */
+  .mbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; min-height: 5.2rem; border-radius: 18px; background: #fff; border: 2px solid #D3DCE1; color: #244956; font-weight: 700; transition: transform .1s, border-color .15s, background .15s; }
+  .mbtn:active { transform: scale(.97); }
+  .mbtn svg { width: 30px; height: 30px; }
+  .mbtn.is-rec { background: #D1495B; border-color: #D1495B; color: #fff; }
+
+  /* 録音中パルス */
+  .pulse-dot { position: relative; width: 14px; height: 14px; border-radius: 50%; background: #D1495B; }
+  .pulse-dot::before, .pulse-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #D1495B; animation: pulse 1.6s ease-out infinite; }
+  .pulse-dot::after { animation-delay: .8s; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(3.2); opacity: 0; } }
+  .mbtn.is-rec .rec-ring { animation: ring 1.2s ease-in-out infinite; }
+  @keyframes ring { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+  .wave span { display: inline-block; width: 4px; margin: 0 1.5px; border-radius: 2px; background: #D1495B; animation: wave 1s ease-in-out infinite; }
+  .wave span:nth-child(2) { animation-delay: .15s } .wave span:nth-child(3) { animation-delay: .3s } .wave span:nth-child(4) { animation-delay: .45s } .wave span:nth-child(5) { animation-delay: .6s }
+  @keyframes wave { 0%,100% { height: 6px } 50% { height: 20px } }
+
+  .chip { border: 2px solid #D3DCE1; background: #fff; border-radius: 999px; padding: .45rem 1rem; font-weight: 500; min-height: 44px; }
+  .chip[aria-pressed="true"] { background: #2F5D6B; border-color: #2F5D6B; color: #fff; }
+
+  .btn-main { background: #2F5D6B; color: #fff; font-weight: 700; border-radius: 16px; min-height: 56px; padding: 0 1.25rem; }
+  .btn-main:active { background: #244956; }
+  .btn-main:disabled { opacity: .5; }
+  .btn-sub { background: #fff; color: #244956; border: 2px solid #C6D1D7; font-weight: 700; border-radius: 14px; min-height: 48px; padding: 0 1rem; }
+  .btn-spark { background: #F2B134; color: #1C2833; font-weight: 900; border-radius: 14px; min-height: 48px; padding: 0 1rem; }
+  .field { width: 100%; background: #fff; border: 2px solid #D3DCE1; border-radius: 14px; padding: .8rem 1rem; min-height: 52px; }
+  .field:focus { border-color: #2F5D6B; outline: none; }
+
+  /* 思い出した瞬間 */
+  .spark-reveal { animation: sparkIn .7s cubic-bezier(.2,.9,.3,1.2) both; }
+  @keyframes sparkIn { 0% { transform: scale(.85); opacity: 0; box-shadow: 0 0 0 0 rgba(242,177,52,.7); } 60% { box-shadow: 0 0 0 18px rgba(242,177,52,0); } 100% { transform: scale(1); opacity: 1; } }
+
+  .conf-高 { background: #F2B134; color: #1C2833; }
+  .conf-中 { background: #2F5D6B; color: #fff; }
+  .conf-低 { background: #D3DCE1; color: #1C2833; }
+
+  .spinner { width: 46px; height: 46px; border-radius: 50%; border: 5px solid rgba(255,255,255,.35); border-top-color: #F2B134; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tabbar { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .tabbtn[aria-current="page"] { color: #2F5D6B; }
+  .tabbtn[aria-current="page"] .tab-ind { background: #F2B134; }
+
+  /* 手書きパッド */
+  #padCanvas { touch-action: none; background: #fff; cursor: crosshair; display: block; }
+  .tool[aria-pressed="true"] { background: #2F5D6B; color: #fff; border-color: #2F5D6B; }
+
+  .modal-bg { background: rgba(28,40,51,.55); }
+  .sheet { max-height: 92vh; overflow-y: auto; }
+  .thumb { width: 84px; height: 84px; object-fit: cover; border-radius: 12px; background: #D3DCE1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- オフライン通知 -->
+<div id="offlineBanner" class="hidden fixed top-0 inset-x-0 z-[70] bg-rec text-white text-center py-2 text-sm font-bold" style="padding-top:calc(env(safe-area-inset-top,0px) + .5rem)">
+  オフラインです。電波の良い場所で再度お試しください。
+</div>
+
+<!-- ===================== 認証画面 ===================== -->
+<section id="authView" class="hidden min-h-screen flex flex-col items-center justify-center px-5 py-10">
+  <div class="w-full max-w-md">
+    <div class="mb-8">
+      <h1 class="text-[2.4rem] leading-tight font-black text-tideDark tracking-tight">もやもや<br>メモ</h1>
+      <p class="mt-3 text-mute leading-relaxed">「あれ、なんだっけ？」を、声でも手書きでも写真でも。<br>AIと一緒に思い出して、忘れやすい傾向もわかります。</p>
+    </div>
+
+    <div class="fogcard p-5">
+      <div class="grid grid-cols-2 gap-2 mb-5" role="tablist">
+        <button class="chip" id="tabLogin" role="tab" aria-pressed="true" onclick="Auth.show('login')">ログイン</button>
+        <button class="chip" id="tabRegister" role="tab" aria-pressed="false" onclick="Auth.show('register')">新規登録</button>
+      </div>
+
+      <form id="loginForm" class="space-y-4" onsubmit="Auth.login(event)">
+        <label class="block"><span class="block mb-1 font-bold">メールアドレス</span>
+          <input class="field" type="email" name="email" autocomplete="email" required></label>
+        <label class="block"><span class="block mb-1 font-bold">パスワード</span>
+          <span class="relative block"><input class="field pr-14" type="password" name="password" autocomplete="current-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
+        <button class="btn-main w-full" type="submit">ログイン</button>
+        <button type="button" class="w-full text-tide underline underline-offset-4 py-2" onclick="UI.openModal('forgotModal')">パスワードをお忘れの方</button>
+      </form>
+
+      <form id="registerForm" class="space-y-4 hidden" onsubmit="Auth.register(event)">
+        <label class="block"><span class="block mb-1 font-bold">表示名</span>
+          <input class="field" type="text" name="displayName" maxlength="30" autocomplete="nickname" required></label>
+        <label class="block"><span class="block mb-1 font-bold">メールアドレス</span>
+          <input class="field" type="email" name="email" autocomplete="email" required></label>
+        <label class="block"><span class="block mb-1 font-bold">パスワード（8文字以上）</span>
+          <span class="relative block"><input class="field pr-14" type="password" name="password" minlength="8" autocomplete="new-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
+        <button class="btn-main w-full" type="submit">登録してはじめる</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== アプリ本体 ===================== -->
+<section id="appView" class="hidden min-h-screen pb-28">
+  <header class="sticky top-0 z-30 bg-fog/95 backdrop-blur px-4 pt-3 pb-2 flex items-center justify-between">
+    <span class="text-xl font-black text-tideDark">もやもやメモ</span>
+    <button class="btn-sub !min-h-[44px] text-sm" onclick="UI.openModal('accountModal')" id="userBtn">アカウント</button>
+  </header>
+
+  <main class="max-w-xl mx-auto px-4">
+
+    <!-- ========== 記録する ========== -->
+    <div id="tab-input" data-tab>
+      <div id="entryPanel">
+        <h2 class="text-2xl font-black mt-2 mb-3">なんだっけ…？</h2>
+
+        <div class="fogcard p-4">
+          <div id="voiceStatus" class="hidden mb-3 flex items-center gap-3 rounded-2xl bg-[#FBE9EB] px-4 py-3" role="status">
+            <span class="pulse-dot shrink-0"></span>
+            <span class="font-bold text-rec">聞き取り中</span>
+            <span class="wave flex items-center h-5" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+            <button class="ml-auto font-bold text-rec underline underline-offset-4" onclick="Voice.stop()">止める</button>
+          </div>
+
+          <label for="clues" class="sr-only">手がかり</label>
+          <textarea id="clues" class="clue-area w-full bg-transparent outline-none text-lg" placeholder="覚えている断片をそのまま。&#10;例：えーっと、昔の刑事ドラマに出てた、四角い顔の俳優…"></textarea>
+          <p id="interim" class="text-mute text-base min-h-[1.5rem]" aria-live="polite"></p>
+
+          <div id="attachList" class="flex flex-wrap gap-3 mt-2"></div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-2 mt-3">
+          <button class="mbtn" id="micBtn" onclick="Voice.toggle('clues', 'micBtn', 'main')" aria-pressed="false">
+            <svg class="rec-ring" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+            <span class="text-sm" id="micLabel">話す</span>
+          </button>
+          <button class="mbtn" onclick="Pad.open()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span class="text-sm">書く</span>
+          </button>
+          <button class="mbtn" onclick="document.getElementById('cameraInput').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span class="text-sm">撮る</span>
+          </button>
+          <button class="mbtn" onclick="document.getElementById('fileInput').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+            <span class="text-sm">画像</span>
+          </button>
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="fileInput" accept="image/*" multiple class="hidden">
+
+        <div class="mt-6">
+          <p class="font-bold mb-2">どんな場面で？</p>
+          <div id="situationChips" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <label class="block mt-5"><span class="block font-bold mb-2">いつ</span>
+          <input id="occurredAt" type="datetime-local" class="field"></label>
+
+        <button id="inferBtn" class="btn-main w-full mt-6 text-lg" onclick="Memo.infer()">AIに聞いてみる</button>
+        <p class="text-center text-mute text-sm mt-2">文字・声・手書き・写真のどれか1つでも大丈夫です</p>
+      </div>
+
+      <!-- 推論結果 -->
+      <div id="resultPanel" class="hidden">
+        <div class="flex items-center justify-between mt-2 mb-3">
+          <h2 class="text-2xl font-black">もしかして…</h2>
+          <button class="text-tide underline underline-offset-4" onclick="Memo.backToEntry()">入力に戻る</button>
+        </div>
+        <div id="resultBody"></div>
+      </div>
+
+      <!-- 解決 -->
+      <div id="resolvedPanel" class="hidden"></div>
+    </div>
+
+    <!-- ========== 履歴 ========== -->
+    <div id="tab-history" data-tab class="hidden">
+      <h2 class="text-2xl font-black mt-2 mb-3">これまでの記録</h2>
+      <div class="space-y-2">
+        <input id="searchBox" class="field" type="search" placeholder="キーワードで探す（手がかり・正解・タグ）" oninput="History.render()">
+        <div class="grid grid-cols-2 gap-2">
+          <select id="catFilter" class="field" onchange="History.render()"><option value="">すべてのカテゴリ</option></select>
+          <select id="statusFilter" class="field" onchange="History.render()">
+            <option value="">すべての状態</option><option value="未解決">未解決</option><option value="解決">解決済み</option>
+          </select>
+        </div>
+      </div>
+      <p id="historyCount" class="text-mute text-sm mt-3"></p>
+      <div id="historyList" class="space-y-3 mt-2"></div>
+    </div>
+
+    <!-- ========== 傾向 ========== -->
+    <div id="tab-stats" data-tab class="hidden">
+      <h2 class="text-2xl font-black mt-2 mb-3">忘れやすさの傾向</h2>
+      <div id="statsEmpty" class="hidden fogcard p-5 text-mute">記録が3件以上たまると傾向が見えてきます。まずは「記録する」から1件どうぞ。</div>
+      <div id="statsBody" class="space-y-4">
+        <div id="kpis" class="fogcard p-4 grid grid-cols-3 gap-2 text-center"></div>
+        <div class="fogcard p-4">
+          <h3 class="font-bold mb-2">よく忘れるジャンル</h3>
+          <div class="relative h-64"><canvas id="catChart"></canvas></div>
+        </div>
+        <div class="fogcard p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold">回数の移り変わり</h3>
+            <div class="flex gap-1">
+              <button class="chip !min-h-[40px] !py-1 text-sm" id="trendWeek" aria-pressed="true" onclick="Stats.setTrend('week')">週</button>
+              <button class="chip !min-h-[40px] !py-1 text-sm" id="trendMonth" aria-pressed="false" onclick="Stats.setTrend('month')">月</button>
+            </div>
+          </div>
+          <div class="relative h-60"><canvas id="trendChart"></canvas></div>
+        </div>
+        <div class="fogcard p-4">
+          <h3 class="font-bold mb-2">時間帯</h3>
+          <div class="relative h-52"><canvas id="slotChart"></canvas></div>
+        </div>
+        <div class="fogcard p-4">
+          <h3 class="font-bold mb-2">入力手段</h3>
+          <div class="relative h-52"><canvas id="methodChart"></canvas></div>
+        </div>
+        <div class="fogcard p-4">
+          <h3 class="font-bold mb-1">Google Driveへ書き出す</h3>
+          <p class="text-mute text-sm mb-3">すべての記録をバックアップとして保存します。</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="btn-sub" onclick="Stats.exportTo('md')">Markdown</button>
+            <button class="btn-sub" onclick="Stats.exportTo('csv')">CSV</button>
+          </div>
+          <p id="exportResult" class="mt-3 text-sm break-all"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 下部タブ（片手操作） -->
+  <nav class="tabbar fixed bottom-0 inset-x-0 z-30 bg-paper border-t border-[#D3DCE1]">
+    <div class="max-w-xl mx-auto grid grid-cols-3">
+      <button class="tabbtn flex flex-col items-center py-2 text-mute font-bold" data-go="input" aria-current="page" onclick="UI.go('input')">
+        <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
+        <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+        <span class="text-sm">記録する</span>
+      </button>
+      <button class="tabbtn flex flex-col items-center py-2 text-mute font-bold" data-go="history" onclick="UI.go('history')">
+        <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
+        <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span class="text-sm">履歴</span>
+      </button>
+      <button class="tabbtn flex flex-col items-center py-2 text-mute font-bold" data-go="stats" onclick="UI.go('stats')">
+        <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
+        <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        <span class="text-sm">傾向</span>
+      </button>
+    </div>
+  </nav>
+</section>
+
+<!-- ===================== 手書きパッド ===================== -->
+<div id="padModal" class="hidden fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="padTitle">
+  <div class="bg-paper w-full sm:max-w-lg h-[100dvh] sm:h-[88vh] sm:rounded-3xl flex flex-col" style="padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)">
+    <div class="px-4 pt-3 pb-2">
+      <h3 id="padTitle" class="text-xl font-black">手書きで伝える</h3>
+      <p class="text-mute text-sm">文字でも絵でもOK。帽子の形、髪型、看板の字、名前の一部など。</p>
+    </div>
+    <div id="padWrap" class="flex-1 mx-3 rounded-2xl overflow-hidden border-2 border-[#D3DCE1]">
+      <canvas id="padCanvas" aria-label="手書き入力エリア"></canvas>
+    </div>
+    <div class="px-3 pt-3 flex flex-wrap items-center gap-2">
+      <button class="tool btn-sub !min-h-[44px]" id="toolPen" aria-pressed="true" onclick="Pad.setMode('pen')">ペン</button>
+      <button class="tool btn-sub !min-h-[44px]" id="toolEraser" aria-pressed="false" onclick="Pad.setMode('eraser')">消しゴム</button>
+      <div class="flex items-center gap-1 ml-1" role="group" aria-label="線の太さ">
+        <button class="tool btn-sub !min-h-[44px] !px-3" data-w="3" aria-pressed="false" onclick="Pad.setWidth(3)" aria-label="細い"><span class="block w-2 h-2 rounded-full bg-current"></span></button>
+        <button class="tool btn-sub !min-h-[44px] !px-3" data-w="6" aria-pressed="true" onclick="Pad.setWidth(6)" aria-label="ふつう"><span class="block w-3 h-3 rounded-full bg-current"></span></button>
+        <button class="tool btn-sub !min-h-[44px] !px-3" data-w="11" aria-pressed="false" onclick="Pad.setWidth(11)" aria-label="太い"><span class="block w-4 h-4 rounded-full bg-current"></span></button>
+      </div>
+    </div>
+    <div class="px-3 pt-2 grid grid-cols-2 gap-2">
+      <button class="btn-sub" id="padUndo" onclick="Pad.undo()">1画もどす</button>
+      <button class="btn-sub" onclick="Pad.clear()">全部消す</button>
+    </div>
+    <div class="p-3 grid grid-cols-2 gap-2">
+      <button class="btn-sub" onclick="Pad.close()">やめる</button>
+      <button class="btn-main" onclick="Pad.done()">完了</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== パスワード再発行 ===================== -->
+<div id="forgotModal" class="hidden fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
+  <form class="sheet bg-paper w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4" onsubmit="Auth.forgot(event)">
+    <h3 class="text-xl font-black">パスワードの再発行</h3>
+    <p class="text-mute">登録したメールアドレスに仮パスワードを送ります。ログイン後、新しいパスワードを設定してください。</p>
+    <input class="field" type="email" name="email" placeholder="メールアドレス" autocomplete="email" required>
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" class="btn-sub" onclick="UI.closeModal('forgotModal')">閉じる</button>
+      <button class="btn-main" type="submit">仮パスワードを送る</button>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== パスワード変更 ===================== -->
+<div id="pwModal" class="hidden fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
+  <form class="sheet bg-paper w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4" onsubmit="Auth.changePassword(event)">
+    <h3 class="text-xl font-black">新しいパスワードの設定</h3>
+    <p id="pwForcedMsg" class="hidden bg-sparkSoft rounded-xl p-3">仮パスワードでログインしています。続けるには新しいパスワードを設定してください。</p>
+    <label class="block"><span class="block mb-1 font-bold">現在のパスワード</span>
+      <span class="relative block"><input class="field pr-14" type="password" name="currentPassword" autocomplete="current-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
+    <label class="block"><span class="block mb-1 font-bold">新しいパスワード（8文字以上）</span>
+      <span class="relative block"><input class="field pr-14" type="password" name="newPassword" minlength="8" autocomplete="new-password" required><button type="button" class="eye absolute right-1 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center text-mute" aria-label="パスワードを表示"></button></span></label>
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" id="pwCancel" class="btn-sub" onclick="UI.closeModal('pwModal')">閉じる</button>
+      <button class="btn-main" type="submit">変更する</button>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== アカウント ===================== -->
+<div id="accountModal" class="hidden fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
+  <div class="sheet bg-paper w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-3">
+    <h3 class="text-xl font-black" id="accName"></h3>
+    <p class="text-mute break-all" id="accEmail"></p>
+    <button class="btn-sub w-full" onclick="UI.closeModal('accountModal'); Auth.openChangePassword(false)">パスワードを変更</button>
+    <button class="btn-sub w-full !text-rec" onclick="Auth.logout()">ログアウト</button>
+    <button class="w-full py-3 text-tide underline underline-offset-4" onclick="UI.closeModal('accountModal')">閉じる</button>
+  </div>
+</div>
+
+<!-- ===================== 記録の詳細 ===================== -->
+<div id="detailModal" class="hidden fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
+  <div class="sheet bg-paper w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl p-5" id="detailBody"></div>
+</div>
+
+<!-- ローディング -->
+<div id="loading" class="hidden fixed inset-0 z-[60] modal-bg flex flex-col items-center justify-center gap-4 text-white" role="alert" aria-busy="true">
+  <div class="spinner"></div>
+  <p id="loadingMsg" class="font-bold text-lg px-6 text-center"></p>
+</div>
+
+<!-- トースト -->
+<div id="toasts" class="fixed inset-x-0 bottom-28 z-[65] flex flex-col items-center gap-2 px-4 pointer-events-none" aria-live="assertive"></div>
+
+<script>
+/* =====================================================================
+ * 設定：GASをウェブアプリとしてデプロイしたURLを貼り付けてください
+ * （Gemini APIキーはGAS側のスクリプトプロパティで管理します。ここには書きません）
+ * =================================================================== */
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz9tERkbw8Jm31kclu0scSYszmCDPPmhqAFtaK5ylZXpRhv6wnq7jKVXq0plGzCihSO/exec';
+
+const IMAGE_MAX_SIDE = 1000;     // 送信前リサイズの長辺
+const IMAGE_QUALITY = 0.8;       // JPEG圧縮率
+const MAX_ATTACH = 4;            // 1回に添付できる画像数
+const SESSION_KEY = 'moyamoya_session_v1';
+const SITUATIONS = ['会話中', 'テレビ・動画', '本・雑誌', '仕事中', '外出・旅先', '家事中', 'その他'];
+const CATEGORIES = ['人名', 'エンタメ', '日用品・モノ', '場所・地名', '言葉・用語', '予定・タスク', 'その他'];
+const CAT_COLORS = ['#2F5D6B', '#F2B134', '#8E6C8A', '#5B8C5A', '#C8553D', '#6C8EAD', '#9AA5AE'];
+
+/* ============================ 共通 ============================ */
+const $ = id => document.getElementById(id);
+const S = { token: '', user: null, records: [], recordsLoaded: false };
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+function localNow() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+async function api(action, payload = {}, opts = {}) {
+  const { auth = true, timeout = 120000 } = opts;
+  if (!navigator.onLine) throw new Error('オフラインです。通信できる場所で再度お試しください。');
+  if (GAS_URL.includes('XXXXXXXX')) throw new Error('GAS_URL が未設定です。index.html の GAS_URL を書き換えてください。');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const body = Object.assign({ action }, payload, auth ? { token: S.token } : {});
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // プリフライト回避
+      body: JSON.stringify(body),
+      redirect: 'follow',
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`サーバーとの通信に失敗しました（${res.status}）。`);
+    const data = await res.json();
+    if (!data.ok) {
+      if (data.code === 'AUTH' && auth) Auth.forceLogout(data.error);
+      throw new Error(data.error || '処理に失敗しました。');
+    }
+    return data;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('応答に時間がかかりすぎています。画像を減らすか、少し待って再度お試しください。');
+    if (e instanceof TypeError) throw new Error('サーバーに接続できませんでした。通信状況、またはGASの公開設定（アクセス：全員）を確認してください。');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const UI = {
+  toast(msg, type = 'info', ms = 3200) {
+    const el = document.createElement('div');
+    const color = type === 'error' ? 'bg-rec text-white' : type === 'success' ? 'bg-spark text-ink' : 'bg-ink text-white';
+    el.className = `${color} pointer-events-auto rounded-2xl px-5 py-3 font-bold shadow-lg max-w-md w-full text-center`;
+    el.textContent = msg;
+    $('toasts').appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, ms);
+    setTimeout(() => el.remove(), ms + 350);
+  },
+  _loadingTimer: null,
+  loading(on, msg = '処理しています…', rotate) {
+    clearInterval(this._loadingTimer);
+    $('loading').classList.toggle('hidden', !on);
+    $('loadingMsg').textContent = msg;
+    if (on && rotate && rotate.length) {
+      let i = 0;
+      this._loadingTimer = setInterval(() => { i = (i + 1) % rotate.length; $('loadingMsg').textContent = rotate[i]; }, 2600);
+    }
+  },
+  openModal(id) { $(id).classList.remove('hidden'); document.body.style.overflow = 'hidden'; },
+  closeModal(id) {
+    $(id).classList.add('hidden');
+    if (![...document.querySelectorAll('[role="dialog"]')].some(m => !m.classList.contains('hidden'))) document.body.style.overflow = '';
+  },
+  go(tab) {
+    document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('hidden', el.id !== 'tab-' + tab));
+    document.querySelectorAll('.tabbtn').forEach(b => b.toggleAttribute('aria-current', b.dataset.go === tab));
+    document.querySelectorAll('.tabbtn[aria-current]').forEach(b => b.setAttribute('aria-current', 'page'));
+    window.scrollTo({ top: 0 });
+    if (tab !== 'input') Voice.stop();
+    if (tab === 'history') History.load();
+    if (tab === 'stats') Stats.load();
+  },
+};
+
+/* パスワード表示切替（目アイコン） */
+const EYE = '<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.4 3.3M6.6 6.6A16.8 16.8 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M3 3l18 18M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+function initEyes() {
+  document.querySelectorAll('.eye').forEach(btn => {
+    btn.innerHTML = EYE;
+    btn.addEventListener('click', () => {
+      const input = btn.parentElement.querySelector('input');
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? EYE_OFF : EYE;
+      btn.setAttribute('aria-label', show ? 'パスワードを隠す' : 'パスワードを表示');
+    });
+  });
+}
+
+/* ============================ 認証 ============================ */
+const Auth = {
+  _tempPw: '',
+  show(which) {
+    $('loginForm').classList.toggle('hidden', which !== 'login');
+    $('registerForm').classList.toggle('hidden', which !== 'register');
+    $('tabLogin').setAttribute('aria-pressed', which === 'login');
+    $('tabRegister').setAttribute('aria-pressed', which === 'register');
+  },
+  save(token, user) {
+    S.token = token; S.user = user;
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user })); } catch (e) { /* プライベートモード等 */ }
+  },
+  clear() {
+    S.token = ''; S.user = null; S.records = []; S.recordsLoaded = false;
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* noop */ }
+  },
+  async login(ev) {
+    ev.preventDefault();
+    const f = ev.target;
+    UI.loading(true, 'ログインしています…');
+    try {
+      const r = await api('login', { email: f.email.value, password: f.password.value }, { auth: false });
+      this.save(r.token, r.user);
+      this._tempPw = r.user.mustChangePassword ? f.password.value : '';
+      f.reset();
+      App.enter();
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  async register(ev) {
+    ev.preventDefault();
+    const f = ev.target;
+    UI.loading(true, '登録しています…');
+    try {
+      const r = await api('register', { email: f.email.value, displayName: f.displayName.value, password: f.password.value }, { auth: false });
+      this.save(r.token, r.user);
+      f.reset();
+      UI.toast('登録しました。確認メールを送りました。', 'success');
+      App.enter();
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  async forgot(ev) {
+    ev.preventDefault();
+    const f = ev.target;
+    UI.loading(true, '送信しています…');
+    try {
+      const r = await api('forgotPassword', { email: f.email.value }, { auth: false });
+      UI.closeModal('forgotModal');
+      f.reset();
+      UI.toast(r.message, 'success', 5000);
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  openChangePassword(forced) {
+    const f = document.querySelector('#pwModal form');
+    f.reset();
+    $('pwForcedMsg').classList.toggle('hidden', !forced);
+    $('pwCancel').classList.toggle('hidden', forced);
+    if (forced && this._tempPw) f.currentPassword.value = this._tempPw;
+    UI.openModal('pwModal');
+  },
+  async changePassword(ev) {
+    ev.preventDefault();
+    const f = ev.target;
+    UI.loading(true, '変更しています…');
+    try {
+      const r = await api('changePassword', { currentPassword: f.currentPassword.value, newPassword: f.newPassword.value });
+      S.user.mustChangePassword = false;
+      this.save(S.token, S.user);
+      this._tempPw = '';
+      UI.closeModal('pwModal');
+      UI.toast(r.message, 'success');
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  async logout() {
+    UI.closeModal('accountModal');
+    const token = S.token;
+    this.clear();
+    App.leave();
+    try { await api('logout', { token }, { auth: false }); } catch (e) { /* 失敗しても端末側はログアウト済み */ }
+    UI.toast('ログアウトしました。');
+  },
+  forceLogout(msg) {
+    if (!S.token) return;
+    this.clear();
+    App.leave();
+    UI.toast(msg || 'もう一度ログインしてください。', 'error', 4500);
+  },
+};
+
+/* ============================ 音声入力 ============================ */
+const Voice = {
+  SR: window.SpeechRecognition || window.webkitSpeechRecognition,
+  rec: null, listening: false, target: null, btnId: '', scope: '', base: '',
+  toggle(targetId, btnId, scope) {
+    if (this.listening && this.btnId === btnId) return this.stop();
+    if (this.listening) this.stop();
+    this.start(targetId, btnId, scope);
+  },
+  start(targetId, btnId, scope) {
+    if (!this.SR) {
+      UI.toast('このブラウザは音声入力に対応していません。Chrome または Safari をお使いください。', 'error', 4500);
+      return;
+    }
+    this.target = $(targetId); this.btnId = btnId; this.scope = scope;
+    this.listening = true;
+    this._resetBase();
+    this._spawn();
+    this._ui(true);
+  },
+  _resetBase() {
+    const v = this.target.value;
+    this.base = v && !/[\s、。\n]$/.test(v) ? v + '、' : v;
+  },
+  _spawn() {
+    const rec = new this.SR();
+    rec.lang = 'ja-JP';
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) this.base += t + '、';
+        else interim += t;
+      }
+      this.target.value = this.base + interim;
+      this.target.scrollTop = this.target.scrollHeight;
+      if (this.scope === 'main') $('interim').textContent = interim ? '…' + interim : '';
+      Memo.markMethod(this.scope, '音声');
+    };
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        UI.toast('マイクの使用が許可されていません。ブラウザの設定でマイクを許可してください。', 'error', 5000);
+        this.stop();
+      } else if (e.error === 'network') {
+        UI.toast('音声認識には通信が必要です。', 'error');
+        this.stop();
+      } // no-speech / aborted は onend で再開
+    };
+    rec.onend = () => {
+      // Android/Chrome は無音で自動終了するため、トグルONの間は再開する
+      if (this.listening) {
+        this._resetBase();
+        try { rec.start(); } catch (err) { setTimeout(() => this.listening && this._spawn(), 250); }
+      }
+    };
+    this.rec = rec;
+    try { rec.start(); } catch (err) { UI.toast('音声入力を開始できませんでした。', 'error'); this.stop(); }
+  },
+  stop() {
+    if (!this.listening) return;
+    this.listening = false;
+    try { this.rec && this.rec.stop(); } catch (e) { /* noop */ }
+    this.rec = null;
+    if (this.target) this.target.value = this.target.value.replace(/、$/, '');
+    $('interim').textContent = '';
+    this._ui(false);
+  },
+  _ui(on) {
+    const btn = $(this.btnId);
+    if (btn) {
+      btn.classList.toggle('is-rec', on);
+      btn.setAttribute('aria-pressed', on);
+      const label = btn.querySelector('[data-label]') || (this.btnId === 'micBtn' ? $('micLabel') : null);
+      if (label) label.textContent = on ? '止める' : (label.dataset.label || '話す');
+    }
+    if (this.scope === 'main') $('voiceStatus').classList.toggle('hidden', !on);
+    const rs = $('refineVoiceStatus');
+    if (rs) rs.classList.toggle('hidden', !(on && this.scope === 'refine'));
+  },
+};
+
+/* ============================ 画像処理 ============================ */
+async function resizeImage(file) {
+  let src;
+  try {
+    src = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (e) {
+    src = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('この画像形式は読み込めません（JPEG/PNGでお試しください）。'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  const w = src.width, h = src.height;
+  const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(w, h));
+  const cw = Math.round(w * scale), ch = Math.round(h * scale);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, cw, ch);
+  if (src.close) src.close();
+  return c.toDataURL('image/jpeg', IMAGE_QUALITY);
+}
+
+/* ============================ 手書きパッド ============================ */
+const Pad = {
+  canvas: null, ctx: null, strokes: [], cur: null, mode: 'pen', width: 6, dpr: 1, w: 0, h: 0,
+  init() {
+    this.canvas = $('padCanvas');
+    this.ctx = this.canvas.getContext('2d');
+    const c = this.canvas;
+    if (window.PointerEvent) {
+      c.addEventListener('pointerdown', e => {
+        if (!e.isPrimary) return;
+        e.preventDefault();
+        c.setPointerCapture(e.pointerId);
+        this.begin(this.pos(e));
+      });
+      c.addEventListener('pointermove', e => {
+        if (!this.cur || !e.isPrimary) return;
+        e.preventDefault();
+        const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+        (evs.length ? evs : [e]).forEach(ev => this.extend(this.pos(ev)));
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => c.addEventListener(t, () => this.finish()));
+    } else {
+      // 旧ブラウザ向け Touch / Mouse フォールバック
+      c.addEventListener('touchstart', e => { e.preventDefault(); this.begin(this.pos(e.touches[0])); }, { passive: false });
+      c.addEventListener('touchmove', e => { e.preventDefault(); this.extend(this.pos(e.touches[0])); }, { passive: false });
+      c.addEventListener('touchend', e => { e.preventDefault(); this.finish(); }, { passive: false });
+      c.addEventListener('mousedown', e => this.begin(this.pos(e)));
+      c.addEventListener('mousemove', e => this.cur && this.extend(this.pos(e)));
+      window.addEventListener('mouseup', () => this.finish());
+    }
+    window.addEventListener('resize', () => { if (!$('padModal').classList.contains('hidden')) this.fit(); });
+  },
+  open() {
+    Voice.stop();
+    if (S.attach.length >= MAX_ATTACH) return UI.toast(`画像は${MAX_ATTACH}枚までです。`, 'error');
+    this.strokes = [];
+    UI.openModal('padModal');
+    requestAnimationFrame(() => this.fit());
+    this.updateBtns();
+  },
+  close() { UI.closeModal('padModal'); },
+  fit() {
+    const r = $('padWrap').getBoundingClientRect();
+    this.w = Math.floor(r.width); this.h = Math.floor(r.height);
+    this.dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.canvas.width = this.w * this.dpr;
+    this.canvas.height = this.h * this.dpr;
+    this.canvas.style.width = this.w + 'px';
+    this.canvas.style.height = this.h + 'px';
+    this.redraw();
+  },
+  pos(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  },
+  begin(p) {
+    this.cur = { mode: this.mode, width: this.mode === 'eraser' ? this.width * 4 : this.width, pts: [p] };
+    this.strokes.push(this.cur);
+    this.drawStroke(this.ctx, this.cur, this.dpr);
+  },
+  extend(p) {
+    const s = this.cur, ctx = this.ctx;
+    const last = s.pts[s.pts.length - 1];
+    s.pts.push(p);
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.style(ctx, s);
+    ctx.beginPath();
+    ctx.moveTo(last[0], last[1]);
+    ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
+  },
+  finish() {
+    if (!this.cur) return;
+    this.cur = null;
+    this.updateBtns();
+  },
+  style(ctx, s) {
+    ctx.strokeStyle = s.mode === 'eraser' ? '#ffffff' : '#1C2833';
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.lineWidth = s.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  },
+  drawStroke(ctx, s, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    this.style(ctx, s);
+    const p = s.pts;
+    if (p.length === 1) {
+      ctx.beginPath(); ctx.arc(p[0][0], p[0][1], s.width / 2, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length - 1; i++) {
+      const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+      ctx.quadraticCurveTo(p[i][0], p[i][1], mx, my);
+    }
+    ctx.lineTo(p[p.length - 1][0], p[p.length - 1][1]);
+    ctx.stroke();
+  },
+  paintAll(ctx, scale, w, h) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    this.strokes.forEach(s => this.drawStroke(ctx, s, scale));
+  },
+  redraw() { this.paintAll(this.ctx, this.dpr, this.canvas.width, this.canvas.height); },
+  undo() { this.strokes.pop(); this.redraw(); this.updateBtns(); },
+  clear() {
+    if (this.strokes.length && !confirm('描いた内容を全部消しますか？')) return;
+    this.strokes = []; this.redraw(); this.updateBtns();
+  },
+  setMode(m) {
+    this.mode = m;
+    $('toolPen').setAttribute('aria-pressed', m === 'pen');
+    $('toolEraser').setAttribute('aria-pressed', m === 'eraser');
+  },
+  setWidth(w) {
+    this.width = w;
+    document.querySelectorAll('[data-w]').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.w) === w));
+  },
+  updateBtns() { $('padUndo').disabled = this.strokes.length === 0; },
+  done() {
+    if (!this.strokes.some(s => s.mode === 'pen')) return UI.toast('まだ何も描かれていません。', 'error');
+    // 長辺1000px以内で書き出し（白背景PNG）
+    const scale = Math.min(2, IMAGE_MAX_SIDE / Math.max(this.w, this.h));
+    const out = document.createElement('canvas');
+    out.width = Math.round(this.w * scale);
+    out.height = Math.round(this.h * scale);
+    this.paintAll(out.getContext('2d'), scale, out.width, out.height);
+    const dataUrl = out.toDataURL('image/png');
+    Memo.addAttachment('handwriting', dataUrl);
+    Memo.markMethod('main', '手書き');
+    this.close();
+  },
+};
+
+/* ============================ 記録＆推論 ============================ */
+S.attach = [];
+S.methods = new Set();
+S.situation = '';
+S.current = null;
+S.refineMethods = new Set();
+
+const Memo = {
+  init() {
+    $('situationChips').innerHTML = SITUATIONS.map(s =>
+      `<button class="chip" aria-pressed="false" data-sit="${esc(s)}">${esc(s)}</button>`).join('');
+    $('situationChips').addEventListener('click', e => {
+      const b = e.target.closest('[data-sit]');
+      if (!b) return;
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      document.querySelectorAll('[data-sit]').forEach(x => x.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', on);
+      S.situation = on ? b.dataset.sit : '';
+    });
+    $('occurredAt').value = localNow();
+    $('clues').addEventListener('input', e => { if (e.isTrusted && !Voice.listening) this.markMethod('main', 'テキスト'); });
+    $('cameraInput').addEventListener('change', e => this.onFiles(e.target));
+    $('fileInput').addEventListener('change', e => this.onFiles(e.target));
+  },
+  markMethod(scope, m) { (scope === 'refine' ? S.refineMethods : S.methods).add(m); },
+  async onFiles(input) {
+    const files = [...input.files];
+    input.value = '';
+    if (!files.length) return;
+    const room = MAX_ATTACH - S.attach.length;
+    if (room <= 0) return UI.toast(`画像は${MAX_ATTACH}枚までです。`, 'error');
+    if (files.length > room) UI.toast(`画像は${MAX_ATTACH}枚までのため、${room}枚だけ追加します。`);
+    UI.loading(true, '画像を軽くしています…');
+    try {
+      for (const f of files.slice(0, room)) {
+        const dataUrl = await resizeImage(f);
+        this.addAttachment('photo', dataUrl);
+      }
+      this.markMethod('main', '写真');
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  addAttachment(kind, dataUrl) {
+    S.attach.push({ id: Math.random().toString(36).slice(2), kind, dataUrl });
+    this.renderAttach();
+  },
+  removeAttachment(id) {
+    S.attach = S.attach.filter(a => a.id !== id);
+    if (!S.attach.some(a => a.kind === 'photo')) S.methods.delete('写真');
+    if (!S.attach.some(a => a.kind === 'handwriting')) S.methods.delete('手書き');
+    this.renderAttach();
+  },
+  renderAttach() {
+    $('attachList').innerHTML = S.attach.map(a => `
+      <figure class="relative">
+        <img src="${a.dataUrl}" class="thumb border-2 border-[#D3DCE1]" alt="${a.kind === 'photo' ? '添付した写真' : '手書き'}">
+        <figcaption class="absolute left-1 bottom-1 text-xs font-bold bg-white/90 rounded-md px-1.5">${a.kind === 'photo' ? '写真' : '手書き'}</figcaption>
+        <button class="absolute -top-2 -right-2 w-9 h-9 rounded-full bg-ink text-white font-black" aria-label="この画像を外す" onclick="Memo.removeAttachment('${a.id}')">×</button>
+      </figure>`).join('');
+  },
+  async infer() {
+    Voice.stop();
+    const clues = $('clues').value.trim();
+    if (!clues && !S.attach.length) return UI.toast('手がかりを1つ入力してください（文字・声・手書き・写真）。', 'error');
+    if (clues && !S.methods.has('音声') && !S.methods.has('テキスト')) S.methods.add('テキスト');
+    const occ = $('occurredAt').value ? new Date($('occurredAt').value).toISOString() : new Date().toISOString();
+    const images = S.attach.map(a => ({
+      kind: a.kind,
+      mimeType: a.dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+      data: a.dataUrl.split(',')[1],
+    }));
+    const msgs = images.length
+      ? ['画像をDriveに保存しています…', '手書き・写真を読み取っています…', '手がかりをつなぎ合わせています…', 'もう少しです…']
+      : ['手がかりを整理しています…', '候補を思い浮かべています…', 'もう少しです…'];
+    UI.loading(true, msgs[0], msgs);
+    $('inferBtn').disabled = true;
+    try {
+      const r = await api('infer', { clues, situation: S.situation, occurredAt: occ, inputMethods: [...S.methods], images });
+      S.current = r.record;
+      S.records.unshift(r.record);
+      if (r.aiError) UI.toast('記録は保存しましたが、AIの推論に失敗しました: ' + r.aiError, 'error', 6000);
+      this.resetEntry();
+      this.showResult(r.record, r.inference);
+    } catch (e) {
+      UI.toast(e.message, 'error', 5000); // 入力内容は残すので、そのまま再試行できる
+    } finally {
+      UI.loading(false);
+      $('inferBtn').disabled = false;
+    }
+  },
+  resetEntry() {
+    $('clues').value = '';
+    $('interim').textContent = '';
+    S.attach = []; S.methods = new Set(); S.situation = '';
+    document.querySelectorAll('[data-sit]').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    $('occurredAt').value = localNow();
+    this.renderAttach();
+  },
+  panel(which) {
+    $('entryPanel').classList.toggle('hidden', which !== 'entry');
+    $('resultPanel').classList.toggle('hidden', which !== 'result');
+    $('resolvedPanel').classList.toggle('hidden', which !== 'resolved');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+  backToEntry() { Voice.stop(); this.panel('entry'); },
+  candidateHtml(rec, pickFn) {
+    const cands = rec.candidates || [];
+    if (!cands.length) return '<p class="text-mute">候補を出せませんでした。手がかりを足して、もう一度聞いてみてください。</p>';
+    return cands.map((c, i) => `
+      <div class="bg-white rounded-2xl p-4 border-2 ${i === 0 ? 'border-spark' : 'border-[#D3DCE1]'}">
+        <div class="flex items-start gap-3">
+          <div class="flex-1 min-w-0">
+            <p class="text-xl font-black break-words">${esc(c.name)}</p>
+            <p class="text-mute text-sm mt-1">${esc(c.category)}</p>
+          </div>
+          <span class="conf-${esc(c.confidence)} shrink-0 rounded-full px-3 py-1 text-sm font-bold">確度 ${esc(c.confidence)}</span>
+        </div>
+        ${c.reason ? `<p class="mt-2 leading-relaxed">${esc(c.reason)}</p>` : ''}
+        <button class="btn-spark w-full mt-3" onclick="${pickFn}('${esc(rec.recordId)}', ${i})">これだ！</button>
+      </div>`).join('');
+  },
+  showResult(rec, inf) {
+    S.refineMethods = new Set();
+    const ia = (inf && inf.imageAnalysis) || [];
+    $('resultBody').innerHTML = `
+      ${rec.aiInterpretation ? `<p class="text-lg leading-relaxed mb-3">${esc(rec.aiInterpretation)}</p>` : ''}
+      ${rec.extractedKeywords.length ? `<div class="flex flex-wrap gap-2 mb-4" aria-label="AIが拾った手がかり">${rec.extractedKeywords.map(k => `<span class="bg-white border border-[#D3DCE1] rounded-full px-3 py-1 text-sm">${esc(k)}</span>`).join('')}</div>` : ''}
+      ${ia.length ? `<div class="fogcard p-4 mb-4 space-y-2"><p class="font-bold">画像から読み取ったこと</p>${ia.map(a => `
+        <div class="text-sm leading-relaxed"><span class="font-bold">${esc(a.kind || '')}${a.index ? ' ' + esc(a.index) : ''}：</span>${a.transcription ? `「${esc(a.transcription)}」 ` : ''}${esc(a.description || '')}</div>`).join('')}</div>` : ''}
+      <div class="space-y-3">${this.candidateHtml(rec, 'Memo.pick')}</div>
+      ${inf && inf.followUpQuestion ? `<p class="mt-4 bg-sparkSoft rounded-2xl p-4 leading-relaxed"><span class="font-bold">AIからの質問：</span>${esc(inf.followUpQuestion)}</p>` : ''}
+
+      <div class="fogcard p-4 mt-4">
+        <p class="font-bold mb-2">手がかりを足してもう一度</p>
+        <div id="refineVoiceStatus" class="hidden mb-2 flex items-center gap-3 rounded-xl bg-[#FBE9EB] px-3 py-2"><span class="pulse-dot"></span><span class="font-bold text-rec">聞き取り中</span></div>
+        <textarea id="refineText" class="field clue-area !min-h-[5rem]" placeholder="例：主題歌が有名だった、苗字は「た」で始まる気がする"></textarea>
+        <div class="grid grid-cols-[auto_1fr] gap-2 mt-2">
+          <button class="mbtn !min-h-[52px] !flex-row !px-4" id="refineMic" aria-pressed="false" onclick="Voice.toggle('refineText','refineMic','refine')">
+            <svg class="!w-6 !h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>
+            <span class="text-sm" data-label="話す">話す</span>
+          </button>
+          <button class="btn-main" onclick="Memo.refine()">もう一度聞く</button>
+        </div>
+      </div>
+
+      <div class="fogcard p-4 mt-4">
+        <p class="font-bold mb-2">自分で思い出した</p>
+        <div class="grid grid-cols-[1fr_auto] gap-2">
+          <input id="manualAnswer" class="field" placeholder="思い出した答え" enterkeyhint="done">
+          <button class="btn-spark" onclick="Memo.resolveManual()">確定</button>
+        </div>
+      </div>
+
+      <button class="btn-sub w-full mt-4" onclick="Memo.later()">あとで思い出す（このまま保存）</button>`;
+    $('refineText').addEventListener('input', e => { if (e.isTrusted && !Voice.listening) Memo.markMethod('refine', 'テキスト'); });
+    this.panel('result');
+  },
+  async refine() {
+    Voice.stop();
+    const extra = $('refineText').value.trim();
+    if (!extra) return UI.toast('追加の手がかりを入力してください。', 'error');
+    if (!S.refineMethods.size) S.refineMethods.add('テキスト');
+    UI.loading(true, '手がかりを足して考え直しています…', ['手がかりを足して考え直しています…', '候補を入れ替えています…']);
+    try {
+      const r = await api('refine', { recordId: S.current.recordId, extraClues: extra, inputMethods: [...S.refineMethods] });
+      S.current = r.record;
+      History.replace(r.record);
+      this.showResult(r.record, r.inference);
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  pick(recordId, idx) {
+    const c = S.current.candidates[idx];
+    return this.doResolve(recordId, c.name, 'AI候補');
+  },
+  resolveManual() {
+    const v = $('manualAnswer').value.trim();
+    if (!v) return UI.toast('思い出した答えを入力してください。', 'error');
+    return this.doResolve(S.current.recordId, v, '自力');
+  },
+  async doResolve(recordId, answer, by, fromDetail) {
+    Voice.stop();
+    UI.loading(true, '記録を分類しています…');
+    try {
+      const r = await api('resolve', { recordId, answer, resolvedBy: by });
+      History.replace(r.record);
+      if (fromDetail) {
+        UI.closeModal('detailModal');
+        History.render();
+        UI.toast(`「${r.record.answer}」で解決しました。`, 'success');
+      } else {
+        this.showResolved(r.record);
+      }
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+  showResolved(rec) {
+    $('resolvedPanel').innerHTML = `
+      <div class="spark-reveal mt-4 rounded-3xl bg-spark p-6">
+        <p class="font-bold">思い出した！</p>
+        <p class="text-3xl font-black leading-tight mt-1 break-words">${esc(rec.answer)}</p>
+        <p class="mt-3 font-bold">${esc(rec.category)}${rec.subCategory ? '／' + esc(rec.subCategory) : ''}</p>
+        ${rec.tags.length ? `<div class="flex flex-wrap gap-2 mt-3">${rec.tags.map(t => `<span class="bg-white/80 rounded-full px-3 py-1 text-sm">#${esc(t)}</span>`).join('')}</div>` : ''}
+      </div>
+      ${rec.memoryHint ? `<div class="fogcard p-4 mt-4"><p class="font-bold mb-1">次に思い出すためのヒント</p><p class="text-lg leading-relaxed">${esc(rec.memoryHint)}</p></div>` : ''}
+      <p class="text-mute mt-4">${rec.resolveMinutes != null ? `記録してから ${rec.resolveMinutes} 分で解決。` : ''}${rec.resolvedBy === 'AI候補' ? 'AIの候補から見つかりました。' : '自力で思い出しました。'}</p>
+      <button class="btn-main w-full mt-6" onclick="Memo.panel('entry')">次の「なんだっけ」を記録する</button>`;
+    this.panel('resolved');
+  },
+  later() {
+    Voice.stop();
+    UI.toast('未解決として保存しました。履歴からいつでも解決できます。');
+    this.panel('entry');
+  },
+};
+
+/* ============================ 履歴 ============================ */
+const ImgCache = new Map();
+const History = {
+  async load(force) {
+    if (S.recordsLoaded && !force) return this.render();
+    $('historyList').innerHTML = '<p class="text-mute">読み込んでいます…</p>';
+    try {
+      const r = await api('listRecords');
+      S.records = r.records;
+      S.recordsLoaded = true;
+      this.render();
+      if (!$('tab-stats').classList.contains('hidden')) Stats.render();
+    } catch (e) {
+      $('historyList').innerHTML = `<div class="fogcard p-4"><p>${esc(e.message)}</p><button class="btn-sub mt-3" onclick="History.load(true)">再読み込み</button></div>`;
+    }
+  },
+  replace(rec) {
+    const i = S.records.findIndex(r => r.recordId === rec.recordId);
+    if (i >= 0) S.records[i] = rec; else S.records.unshift(rec);
+  },
+  filtered() {
+    const q = $('searchBox').value.trim().toLowerCase();
+    const cat = $('catFilter').value;
+    const st = $('statusFilter').value;
+    return S.records.filter(r => {
+      if (cat && r.category !== cat) return false;
+      if (st && r.status !== st) return false;
+      if (!q) return true;
+      return [r.clues, r.answer, r.situation, r.aiInterpretation, r.tags.join(' '), r.extractedKeywords.join(' ')]
+        .join(' ').toLowerCase().includes(q);
+    });
+  },
+  methodBadges(r) {
+    return r.inputMethods.map(m => `<span class="text-xs border border-[#C6D1D7] rounded-full px-2 py-0.5">${esc(m)}</span>`).join(' ');
+  },
+  render() {
+    const list = this.filtered();
+    $('historyCount').textContent = S.records.length ? `${list.length} 件 ／ 全 ${S.records.length} 件` : '';
+    if (!S.records.length) {
+      $('historyList').innerHTML = '<div class="fogcard p-5"><p class="mb-3">まだ記録がありません。「あれ、なんだっけ？」と思ったら、まず1件記録してみましょう。</p><button class="btn-main w-full" onclick="UI.go(\'input\')">記録する</button></div>';
+      return;
+    }
+    if (!list.length) {
+      $('historyList').innerHTML = '<p class="text-mute">条件に合う記録はありません。検索語やカテゴリを変えてみてください。</p>';
+      return;
+    }
+    $('historyList').innerHTML = list.map(r => `
+      <button class="block w-full text-left fogcard p-4" onclick="History.detail('${esc(r.recordId)}')">
+        <div class="flex items-center gap-2 text-sm text-mute">
+          <span>${fmtDate(r.occurredAt)}</span>
+          <span class="ml-auto rounded-full px-2 py-0.5 font-bold ${r.status === '解決' ? 'bg-sparkSoft text-ink' : 'bg-[#D3DCE1] text-ink'}">${r.status === '解決' ? '解決' : '未解決'}</span>
+        </div>
+        <p class="text-xl font-black mt-1 break-words">${r.answer ? esc(r.answer) : '<span class="text-mute font-bold">まだ思い出せていない</span>'}</p>
+        ${r.category ? `<p class="text-sm text-tide font-bold">${esc(r.category)}${r.subCategory ? '／' + esc(r.subCategory) : ''}</p>` : ''}
+        <p class="mt-2 text-mute line-clamp-2 leading-relaxed">${esc(r.clues || r.aiInterpretation || '（画像のみ）')}</p>
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          ${this.methodBadges(r)}
+          ${r.imageFileIds.map(id => `<img data-fid="${esc(id)}" class="thumb !w-12 !h-12" alt="">`).join('')}
+        </div>
+      </button>`).join('');
+    this.loadThumbs($('historyList'));
+  },
+  async loadThumbs(root) {
+    const imgs = [...root.querySelectorAll('img[data-fid]')];
+    const queue = imgs.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const img = queue.shift();
+        const id = img.dataset.fid;
+        try {
+          if (!ImgCache.has(id)) {
+            const r = await api('getImage', { fileId: id }, { timeout: 60000 });
+            ImgCache.set(id, `data:${r.mimeType};base64,${r.data}`);
+          }
+          img.src = ImgCache.get(id);
+        } catch (e) { img.alt = '画像を読み込めません'; }
+      }
+    };
+    await Promise.all([worker(), worker()]);
+  },
+  detail(recordId) {
+    const r = S.records.find(x => x.recordId === recordId);
+    if (!r) return;
+    const unresolved = r.status !== '解決';
+    $('detailBody').innerHTML = `
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-mute">${fmtDate(r.occurredAt)}${r.situation ? '・' + esc(r.situation) : ''}</p>
+        <button class="w-11 h-11 rounded-full bg-fog font-black" aria-label="閉じる" onclick="UI.closeModal('detailModal')">×</button>
+      </div>
+      ${r.answer ? `<div class="rounded-2xl bg-spark p-4 mb-3"><p class="text-2xl font-black break-words">${esc(r.answer)}</p><p class="font-bold mt-1">${esc(r.category)}${r.subCategory ? '／' + esc(r.subCategory) : ''}</p></div>` : ''}
+      <p class="font-bold">手がかり</p>
+      <p class="whitespace-pre-wrap leading-relaxed mb-3">${esc(r.clues || '（画像のみ）')}</p>
+      <div class="flex flex-wrap gap-2 mb-3">${this.methodBadges(r)}</div>
+      ${r.imageFileIds.length ? `<div class="grid grid-cols-2 gap-2 mb-3">${r.imageFileIds.map((id, i) => `
+        <a href="${esc(r.imageUrls[i] || '#')}" target="_blank" rel="noopener" class="block"><img data-fid="${esc(id)}" class="w-full aspect-square object-cover rounded-xl bg-fog" alt="${r.imageKinds[i] === 'handwriting' ? '手書き画像' : '写真'}"></a>`).join('')}</div>
+        <p class="text-sm text-mute mb-3">画像をタップするとGoogle Driveで開きます。</p>` : ''}
+      ${r.aiInterpretation ? `<p class="font-bold">AIの解釈</p><p class="leading-relaxed mb-3">${esc(r.aiInterpretation)}</p>` : ''}
+      ${r.tags.length ? `<div class="flex flex-wrap gap-2 mb-3">${r.tags.map(t => `<span class="bg-fog rounded-full px-3 py-1 text-sm">#${esc(t)}</span>`).join('')}</div>` : ''}
+      ${r.memoryHint ? `<div class="bg-sparkSoft rounded-2xl p-3 mb-3"><span class="font-bold">覚え方：</span>${esc(r.memoryHint)}</div>` : ''}
+      ${r.resolveMinutes != null ? `<p class="text-mute mb-3">解決まで ${r.resolveMinutes} 分（${esc(r.resolvedBy)}）</p>` : ''}
+      ${unresolved ? `
+        <p class="font-bold mt-2 mb-2">AIの候補</p>
+        <div class="space-y-3">${Memo.candidateHtml(r, 'History.pick')}</div>
+        <p class="font-bold mt-4 mb-2">自分で思い出した</p>
+        <div class="grid grid-cols-[1fr_auto] gap-2">
+          <input id="detailAnswer" class="field" placeholder="思い出した答え">
+          <button class="btn-spark" onclick="History.manual('${esc(r.recordId)}')">確定</button>
+        </div>
+        <button class="btn-sub w-full mt-3" onclick="History.continueRefine('${esc(r.recordId)}')">手がかりを足してAIに聞き直す</button>` : ''}
+      <button class="w-full mt-5 py-3 text-rec font-bold underline underline-offset-4" onclick="History.remove('${esc(r.recordId)}')">この記録を削除</button>`;
+    UI.openModal('detailModal');
+    this.loadThumbs($('detailBody'));
+  },
+  pick(recordId, idx) {
+    const r = S.records.find(x => x.recordId === recordId);
+    Memo.doResolve(recordId, r.candidates[idx].name, 'AI候補', true);
+  },
+  manual(recordId) {
+    const v = $('detailAnswer').value.trim();
+    if (!v) return UI.toast('思い出した答えを入力してください。', 'error');
+    Memo.doResolve(recordId, v, '自力', true);
+  },
+  continueRefine(recordId) {
+    const r = S.records.find(x => x.recordId === recordId);
+    UI.closeModal('detailModal');
+    S.current = r;
+    UI.go('input');
+    Memo.showResult(r, null);
+  },
+  async remove(recordId) {
+    if (!confirm('この記録と添付画像を削除します。よろしいですか？')) return;
+    UI.loading(true, '削除しています…');
+    try {
+      await api('deleteRecord', { recordId });
+      S.records = S.records.filter(r => r.recordId !== recordId);
+      UI.closeModal('detailModal');
+      this.render();
+      UI.toast('削除しました。');
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+};
+
+/* ============================ 傾向分析 ============================ */
+const Stats = {
+  charts: {}, trend: 'week',
+  async load() {
+    if (!S.recordsLoaded) await History.load(true);
+    this.render();
+  },
+  setTrend(t) {
+    this.trend = t;
+    $('trendWeek').setAttribute('aria-pressed', t === 'week');
+    $('trendMonth').setAttribute('aria-pressed', t === 'month');
+    this.render();
+  },
+  chart(id, config) {
+    if (this.charts[id]) this.charts[id].destroy();
+    this.charts[id] = new Chart($(id), config);
+  },
+  render() {
+    const recs = S.records;
+    const few = recs.length < 3;
+    $('statsEmpty').classList.toggle('hidden', !few);
+    $('statsBody').classList.toggle('hidden', recs.length === 0);
+    if (!recs.length) return;
+    if (!window.Chart) { UI.toast('グラフ部品を読み込めませんでした。再読み込みしてください。', 'error'); return; }
+    Chart.defaults.font.family = '"Zen Maru Gothic", sans-serif';
+    Chart.defaults.font.size = 14;
+    Chart.defaults.color = '#1C2833';
+
+    // KPI
+    const resolved = recs.filter(r => r.status === '解決');
+    const ai = resolved.filter(r => r.resolvedBy === 'AI候補').length;
+    const mins = resolved.map(r => r.resolveMinutes).filter(v => v != null).sort((a, b) => a - b);
+    const median = mins.length ? mins[Math.floor(mins.length / 2)] : null;
+    const medianText = median == null ? '-' : median < 60 ? `${median}分` : median < 1440 ? `${Math.round(median / 60)}時間` : `${Math.round(median / 1440)}日`;
+    $('kpis').innerHTML = [
+      ['記録', `${recs.length}件`],
+      ['解決', `${Math.round(resolved.length / recs.length * 100)}%`],
+      ['解決までの中央値', medianText],
+    ].map(([l, v]) => `<div><p class="text-2xl font-black text-tideDark">${v}</p><p class="text-sm text-mute">${l}</p></div>`).join('')
+      + `<p class="col-span-3 text-sm text-mute mt-1">解決のうちAI候補で見つかった割合：${resolved.length ? Math.round(ai / resolved.length * 100) : 0}%</p>`;
+
+    // カテゴリ
+    const catCounts = CATEGORIES.map(c => resolved.filter(r => r.category === c).length);
+    const unresolvedCount = recs.length - resolved.length;
+    this.chart('catChart', {
+      type: 'doughnut',
+      data: {
+        labels: CATEGORIES.concat(unresolvedCount ? ['未解決'] : []),
+        datasets: [{ data: catCounts.concat(unresolvedCount ? [unresolvedCount] : []), backgroundColor: CAT_COLORS.concat(['#E3E8EB']), borderColor: '#F8FAFB', borderWidth: 3 }],
+      },
+      options: { maintainAspectRatio: false, cutout: '58%', plugins: { legend: { position: 'right', labels: { boxWidth: 14, padding: 10, filter: (item, data) => data.datasets[0].data[item.index] > 0 } } } },
+    });
+
+    // 週・月推移（解決／未解決の積み上げ）
+    const buckets = [];
+    const now = new Date();
+    if (this.trend === 'week') {
+      const monday = new Date(now); monday.setHours(0, 0, 0, 0);
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      for (let i = 11; i >= 0; i--) {
+        const s = new Date(monday); s.setDate(s.getDate() - i * 7);
+        const e = new Date(s); e.setDate(e.getDate() + 7);
+        buckets.push({ label: `${s.getMonth() + 1}/${s.getDate()}`, s, e });
+      }
+    } else {
+      for (let i = 11; i >= 0; i--) {
+        const s = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const e = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        buckets.push({ label: `${s.getMonth() + 1}月`, s, e });
+      }
+    }
+    const inB = (r, b) => { const d = new Date(r.occurredAt || r.createdAt); return d >= b.s && d < b.e; };
+    this.chart('trendChart', {
+      type: 'bar',
+      data: {
+        labels: buckets.map(b => b.label),
+        datasets: [
+          { label: '解決', data: buckets.map(b => recs.filter(r => r.status === '解決' && inB(r, b)).length), backgroundColor: '#2F5D6B', borderRadius: 4 },
+          { label: '未解決', data: buckets.map(b => recs.filter(r => r.status !== '解決' && inB(r, b)).length), backgroundColor: '#C6D1D7', borderRadius: 4 },
+        ],
+      },
+      options: { maintainAspectRatio: false, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { position: 'bottom' } } },
+    });
+
+    // 時間帯
+    const slots = [['朝', 5, 11], ['昼', 11, 17], ['夜', 17, 23], ['深夜', 23, 29]];
+    const slotCounts = slots.map(([, a, b]) => recs.filter(r => {
+      let h = new Date(r.occurredAt || r.createdAt).getHours();
+      if (h < 5) h += 24;
+      return h >= a && h < b;
+    }).length);
+    this.chart('slotChart', {
+      type: 'bar',
+      data: { labels: ['朝（5-11時）', '昼（11-17時）', '夜（17-23時）', '深夜（23-5時）'], datasets: [{ data: slotCounts, backgroundColor: ['#F2B134', '#6C8EAD', '#2F5D6B', '#1C2833'], borderRadius: 6 }] },
+      options: { maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } } },
+    });
+
+    // 入力手段
+    const methods = ['テキスト', '音声', '手書き', '写真'];
+    this.chart('methodChart', {
+      type: 'doughnut',
+      data: { labels: methods, datasets: [{ data: methods.map(m => recs.filter(r => r.inputMethods.includes(m)).length), backgroundColor: ['#9AA5AE', '#D1495B', '#8E6C8A', '#2F5D6B'], borderColor: '#F8FAFB', borderWidth: 3 }] },
+      options: { maintainAspectRatio: false, cutout: '58%', plugins: { legend: { position: 'right', labels: { boxWidth: 14, padding: 10 } } } },
+    });
+  },
+  async exportTo(format) {
+    UI.loading(true, 'Google Driveに書き出しています…');
+    try {
+      const r = await api('exportToDrive', { format });
+      $('exportResult').innerHTML = `保存しました：<a class="text-tide underline underline-offset-4" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a>`;
+      UI.toast('Google Driveに保存しました。', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
+};
+
+/* ============================ 起動 ============================ */
+const App = {
+  enter() {
+    $('authView').classList.add('hidden');
+    $('appView').classList.remove('hidden');
+    $('userBtn').textContent = S.user.displayName + ' さん';
+    $('accName').textContent = S.user.displayName + ' さん';
+    $('accEmail').textContent = S.user.email;
+    UI.go('input');
+    Memo.panel('entry');
+    History.load(true);
+    if (S.user.mustChangePassword) Auth.openChangePassword(true);
+  },
+  leave() {
+    Voice.stop();
+    document.querySelectorAll('[role="dialog"]').forEach(m => m.classList.add('hidden'));
+    document.body.style.overflow = '';
+    $('appView').classList.add('hidden');
+    $('authView').classList.remove('hidden');
+    Auth.show('login');
+  },
+  async boot() {
+    initEyes();
+    Pad.init();
+    Memo.init();
+    $('catFilter').innerHTML += CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('');
+    const setOnline = () => $('offlineBanner').classList.toggle('hidden', navigator.onLine);
+    window.addEventListener('online', setOnline);
+    window.addEventListener('offline', setOnline);
+    setOnline();
+
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { saved = null; }
+    if (saved && saved.token) {
+      S.token = saved.token; S.user = saved.user;
+      this.enter();
+      // セッションの有効性を裏で確認（期限切れなら api() がログイン画面へ戻す）
+      api('me').then(r => { S.user = r.user; Auth.save(S.token, r.user); }).catch(() => {});
+    } else {
+      this.leave();
+    }
+  },
+};
+App.boot();
+</script>
+</body>
+</html>
