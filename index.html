@@ -414,6 +414,11 @@ function fmtDate(iso) {
   if (isNaN(d)) return '';
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
+function toLocalInput(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d)) return localNow();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
 function localNow() {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -1124,7 +1129,8 @@ const Memo = {
       </div>
       ${rec.memoryHint ? `<div class="fogcard p-4 mt-4"><p class="font-bold mb-1">次に思い出すためのヒント</p><p class="text-lg leading-relaxed">${esc(rec.memoryHint)}</p></div>` : ''}
       <p class="text-mute mt-4">${rec.resolveMinutes != null ? `記録してから ${rec.resolveMinutes} 分で解決。` : ''}${rec.resolvedBy === 'AI候補' ? 'AIの候補から見つかりました。' : '自力で思い出しました。'}</p>
-      <button class="btn-main w-full mt-6" onclick="Memo.panel('entry')">次の「なんだっけ」を記録する</button>`;
+      <button class="btn-sub w-full mt-6" onclick="History.edit('${esc(rec.recordId)}', 'resolved')">答え・分類を直す</button>
+      <button class="btn-main w-full mt-3" onclick="Memo.panel('entry')">次の「なんだっけ」を記録する</button>`;
     this.panel('resolved');
   },
   later() {
@@ -1234,6 +1240,7 @@ const History = {
       ${r.tags.length ? `<div class="flex flex-wrap gap-2 mb-3">${r.tags.map(t => `<span class="bg-fog rounded-full px-3 py-1 text-sm">#${esc(t)}</span>`).join('')}</div>` : ''}
       ${r.memoryHint ? `<div class="bg-sparkSoft rounded-2xl p-3 mb-3"><span class="font-bold">覚え方：</span>${esc(r.memoryHint)}</div>` : ''}
       ${r.resolveMinutes != null ? `<p class="text-mute mb-3">解決まで ${r.resolveMinutes} 分（${esc(r.resolvedBy)}）</p>` : ''}
+      <button class="btn-sub w-full mb-4" onclick="History.edit('${esc(r.recordId)}')">${unresolved ? '手がかり・場面・日時を直す' : '答え・分類・内容を直す'}</button>
       ${unresolved ? `
         <p class="font-bold mt-2 mb-2">AIの候補</p>
         <div class="space-y-3">${Memo.candidateHtml(r, 'History.pick')}</div>
@@ -1262,6 +1269,120 @@ const History = {
     S.current = r;
     UI.go('input');
     Memo.showResult(r, null);
+  },
+  /* ---------- 記録の修正 ---------- */
+  edit(recordId, from) {
+    const r = S.records.find(x => x.recordId === recordId);
+    if (!r) return;
+    Voice.cancel();
+    const resolved = r.status === '解決';
+    const cats = (!r.category || CATEGORIES.includes(r.category)) ? CATEGORIES : CATEGORIES.concat([r.category]);
+    const sits = (!r.situation || SITUATIONS.includes(r.situation)) ? SITUATIONS : SITUATIONS.concat([r.situation]);
+    const idq = esc(r.recordId), fromq = esc(from || '');
+    $('detailBody').innerHTML = `
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-xl font-black">記録を修正</h3>
+        <button type="button" class="w-11 h-11 rounded-full bg-fog font-black" aria-label="閉じる" onclick="History.cancelEdit('${idq}', '${fromq}')">×</button>
+      </div>
+      <form id="editForm" class="space-y-4" onsubmit="History.saveEdit(event, '${idq}', '${fromq}')">
+        ${resolved ? `
+          <label class="block"><span class="block font-bold mb-1">答え</span>
+            <input class="field" name="answer" maxlength="200" value="${esc(r.answer)}" required></label>
+          <div>
+            <p class="font-bold mb-2">カテゴリ</p>
+            <div class="flex flex-wrap gap-2" id="editCats">${cats.map(c =>
+              `<button type="button" class="chip" data-cat="${esc(c)}" aria-pressed="${c === r.category}">${esc(c)}</button>`).join('')}</div>
+            <input type="hidden" name="category" value="${esc(r.category || '')}">
+          </div>
+          <label class="block"><span class="block font-bold mb-1">サブカテゴリ</span>
+            <input class="field" name="subCategory" maxlength="50" value="${esc(r.subCategory)}" placeholder="例：俳優、映画、植物"></label>
+          <label class="block"><span class="block font-bold mb-1">タグ（「,」か「、」で区切る）</span>
+            <input class="field" name="tags" maxlength="300" value="${esc((r.tags || []).join('、'))}" placeholder="例：刑事ドラマ、昭和"></label>
+          <label class="block"><span class="block font-bold mb-1">覚え方ヒント</span>
+            <textarea class="field clue-area !min-h-[4.5rem]" name="memoryHint" maxlength="500">${esc(r.memoryHint)}</textarea></label>`
+        : `<p class="bg-sparkSoft rounded-xl p-3 leading-relaxed">まだ未解決の記録です。答えは詳細画面の「AIの候補」か「自分で思い出した」から確定してください。</p>`}
+        <label class="block"><span class="block font-bold mb-1">場面</span>
+          <select class="field" name="situation"><option value="">（なし）</option>${sits.map(s =>
+            `<option ${s === r.situation ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+        <label class="block"><span class="block font-bold mb-1">いつ</span>
+          <input class="field" type="datetime-local" name="occurredAt" value="${toLocalInput(r.occurredAt || r.createdAt)}"></label>
+        <label class="block"><span class="block font-bold mb-1">手がかり</span>
+          <textarea class="field clue-area" name="clues" maxlength="2000">${esc(r.clues)}</textarea>
+          <span class="block text-sm text-mute mt-1">手がかりを直しても、AIの候補は自動では出し直しません。</span></label>
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" class="btn-sub" onclick="History.cancelEdit('${idq}', '${fromq}')">やめる</button>
+          <button type="submit" class="btn-main">保存する</button>
+        </div>
+        ${resolved ? `<button type="button" class="w-full py-3 text-rec font-bold underline underline-offset-4" onclick="History.reopen('${idq}', '${fromq}')">解決を取り消して未解決に戻す</button>` : ''}
+      </form>`;
+    const cw = $('editCats');
+    if (cw) cw.addEventListener('click', e => {
+      const b = e.target.closest('[data-cat]');
+      if (!b) return;
+      cw.querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', x === b));
+      $('editForm').category.value = b.dataset.cat;
+    });
+    UI.openModal('detailModal');
+    $('detailBody').scrollTop = 0;
+  },
+  cancelEdit(recordId, from) {
+    if (from === 'resolved') UI.closeModal('detailModal');
+    else this.detail(recordId);
+  },
+  applyPatch(recordId, patch) {
+    const r = S.records.find(x => x.recordId === recordId);
+    if (r) Object.assign(r, patch);
+    if (S.current && S.current.recordId === recordId && S.current !== r) Object.assign(S.current, patch);
+    this.render();
+    if (!$('tab-stats').classList.contains('hidden')) Stats.render();
+    return r || S.current;
+  },
+  afterEdit(rec, from) {
+    if (from === 'resolved') {
+      UI.closeModal('detailModal');
+      if (rec.status === '解決') Memo.showResolved(rec);
+      else { S.current = rec; Memo.showResult(rec, null); }
+    } else {
+      this.detail(rec.recordId);
+    }
+  },
+  async saveEdit(ev, recordId, from) {
+    ev.preventDefault();
+    const f = ev.target;
+    const r = S.records.find(x => x.recordId === recordId);
+    if (!r) return;
+    const fields = {
+      situation: f.situation.value,
+      occurredAt: f.occurredAt.value ? new Date(f.occurredAt.value).toISOString() : (r.occurredAt || ''),
+      clues: f.clues.value.trim(),
+    };
+    if (r.status === '解決') {
+      fields.answer = f.answer.value.trim();
+      fields.category = f.category.value;
+      fields.subCategory = f.subCategory.value.trim();
+      fields.tags = f.tags.value.split(/[,、，]/).map(t => t.replace(/^#/, '').trim()).filter(Boolean);
+      fields.memoryHint = f.memoryHint.value.trim();
+      if (!fields.answer) return UI.toast('答えを入力してください。', 'error');
+      if (!fields.category) return UI.toast('カテゴリを選んでください。', 'error');
+    }
+    if (!fields.clues && !(r.imageFileIds || []).length) return UI.toast('手がかりが空になります。何か入力してください。', 'error');
+    UI.loading(true, '保存しています…');
+    try {
+      const res = await api('updateRecord', { recordId, fields });
+      const rec = this.applyPatch(recordId, res.patch);
+      this.afterEdit(rec, from);
+      UI.toast('修正しました。', 'success');
+    } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
+  },
+  async reopen(recordId, from) {
+    if (!confirm('答えと分類を消して「未解決」に戻します。よろしいですか？')) return;
+    UI.loading(true, '未解決に戻しています…');
+    try {
+      const res = await api('updateRecord', { recordId, reopen: true });
+      const rec = this.applyPatch(recordId, res.patch);
+      this.afterEdit(rec, from);
+      UI.toast('未解決に戻しました。');
+    } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
   },
   async remove(recordId) {
     if (!confirm('この記録と添付画像を削除します。よろしいですか？')) return;
