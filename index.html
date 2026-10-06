@@ -99,6 +99,13 @@
   .react .n { font-variant-numeric: tabular-nums; min-width: 1ch; text-align: center; }
   .react.pop { animation: pop .35s ease-out; }
   @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+  .vis-switch { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; padding: .25rem .5rem .25rem .25rem; border-radius: 999px; font-weight: 700; color: #5E6B75; }
+  .vis-switch .track { position: relative; width: 52px; height: 30px; border-radius: 999px; background: #C6D1D7; transition: background .2s; flex-shrink: 0; }
+  .vis-switch .knob { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; }
+  .vis-switch[aria-checked="true"] { color: #2F5D6B; }
+  .vis-switch[aria-checked="true"] .track { background: #2F5D6B; }
+  .vis-switch[aria-checked="true"] .knob { transform: translateX(22px); }
+  .vis-switch:disabled { opacity: .5; }
   .cmt { background: #fff; border: 2px solid #E3E8EB; border-radius: 16px; padding: .75rem .9rem; }
   .cmt.owner { border-color: #F2B134; }
 
@@ -249,6 +256,9 @@
           <select id="catFilter" class="field" onchange="History.render()"><option value="">すべてのカテゴリ</option></select>
           <select id="statusFilter" class="field" onchange="History.render()">
             <option value="">すべての状態</option><option value="未解決">未解決</option><option value="解決">解決済み</option>
+          </select>
+          <select id="visFilter" class="field col-span-2" onchange="History.render()">
+            <option value="">公開・非公開のすべて</option><option value="公開">公開中だけ</option><option value="非公開">非公開だけ</option>
           </select>
         </div>
       </div>
@@ -1212,8 +1222,10 @@ const History = {
     const q = $('searchBox').value.trim().toLowerCase();
     const cat = $('catFilter').value;
     const st = $('statusFilter').value;
+    const vis = $('visFilter').value;
     return S.records.filter(r => {
       if (cat && r.category !== cat) return false;
+      if (vis && (r.visibility === '公開' ? '公開' : '非公開') !== vis) return false;
       if (st && r.status !== st) return false;
       if (!q) return true;
       return [r.clues, r.answer, r.situation, r.aiInterpretation, r.tags.join(' '), r.extractedKeywords.join(' ')]
@@ -1234,8 +1246,11 @@ const History = {
       $('historyList').innerHTML = '<p class="text-mute">条件に合う記録はありません。検索語やカテゴリを変えてみてください。</p>';
       return;
     }
+    const pubCount = S.records.filter(r => r.visibility === '公開').length;
+    $('historyCount').textContent += `（公開中 ${pubCount} 件）`;
     $('historyList').innerHTML = list.map(r => `
-      <button class="block w-full text-left fogcard p-4" onclick="History.detail('${esc(r.recordId)}')">
+      <div class="fogcard p-4">
+      <button class="block w-full text-left" onclick="History.detail('${esc(r.recordId)}')">
         <div class="flex items-center gap-2 text-sm text-mute">
           <span>${fmtDate(r.occurredAt)}</span>
           ${r.visibility === '公開' ? '<span class="rounded-full px-2 py-0.5 font-bold bg-tide text-white">公開</span>' : ''}
@@ -1249,7 +1264,12 @@ const History = {
           ${r.imageFileIds.map(id => `<img data-fid="${esc(id)}" class="thumb !w-12 !h-12" alt="">`).join('')}
         </div>
         ${Social.summary(r)}
-      </button>`).join('');
+      </button>
+      <div class="flex items-center justify-between gap-2 mt-3 pt-3 border-t-2 border-[#E3E8EB]">
+        ${Social.switchHtml(r)}
+        <span class="text-sm text-mute">${r.visibility === '公開' ? 'みんなに見えています' : '自分だけが見られます'}</span>
+      </div>
+      </div>`).join('');
     this.loadThumbs($('historyList'));
   },
   async loadThumbs(root) {
@@ -1360,6 +1380,13 @@ const History = {
           <label class="block"><span class="block font-bold mb-1">覚え方ヒント</span>
             <textarea class="field clue-area !min-h-[4.5rem]" name="memoryHint" maxlength="500">${esc(r.memoryHint)}</textarea></label>`
         : `<p class="bg-sparkSoft rounded-xl p-3 leading-relaxed">まだ未解決の記録です。答えは詳細画面の「AIの候補」か「自分で思い出した」から確定してください。</p>`}
+        <div>
+          <p class="font-bold mb-2">公開設定</p>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="chip flex items-center justify-center gap-2 cursor-pointer"><input type="radio" name="visibility" value="非公開" class="w-5 h-5 accent-[#2F5D6B]" ${r.visibility === '公開' ? '' : 'checked'}>🔒 非公開</label>
+            <label class="chip flex items-center justify-center gap-2 cursor-pointer"><input type="radio" name="visibility" value="公開" class="w-5 h-5 accent-[#2F5D6B]" ${r.visibility === '公開' ? 'checked' : ''}>🌐 公開</label>
+          </div>
+        </div>
         <label class="block"><span class="block font-bold mb-1">場面</span>
           <select class="field" name="situation"><option value="">（なし）</option>${sits.map(s =>
             `<option ${s === r.situation ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
@@ -1414,7 +1441,10 @@ const History = {
       situation: f.situation.value,
       occurredAt: f.occurredAt.value ? new Date(f.occurredAt.value).toISOString() : (r.occurredAt || ''),
       clues: f.clues.value.trim(),
+      visibility: f.visibility.value === '公開' ? '公開' : '非公開',
     };
+    if (fields.visibility === '公開' && r.visibility !== '公開'
+      && !confirm('表示名と、この記録の内容（手がかり・答え・画像など）が登録者全員に公開されます。公開しますか？')) return;
     if (r.status === '解決') {
       fields.answer = f.answer.value.trim();
       fields.category = f.category.value;
@@ -1429,6 +1459,7 @@ const History = {
     try {
       const res = await api('updateRecord', { recordId, fields });
       const rec = this.applyPatch(recordId, res.patch);
+      if (fields.visibility !== r.visibility) Community.stale = true;
       this.afterEdit(rec, from);
       UI.toast('修正しました。', 'success');
     } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
@@ -1443,8 +1474,9 @@ const History = {
       UI.toast('未解決に戻しました。');
     } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
   },
-  async setVisibility(recordId, visibility, from) {
+  async setVisibility(recordId, visibility, from, btn) {
     if (visibility === '公開' && !confirm('表示名と、この記録の内容（手がかり・答え・画像など）が登録者全員に公開されます。公開しますか？')) return;
+    if (btn) btn.disabled = true;
     UI.loading(true, visibility === '公開' ? '公開しています…' : '非公開にしています…');
     try {
       const r = await api('setVisibility', { recordId, visibility });
@@ -1453,9 +1485,10 @@ const History = {
       if (visibility !== '公開') Community.items = Community.items.filter(x => x.recordId !== recordId);
       if (from === 'resolved') Memo.showResolved(rec);
       else if (from === 'community') { UI.closeModal('detailModal'); Community.render(); }
+      else if (from === 'history') { /* applyPatch で一覧を描き直し済み */ }
       else this.detail(recordId);
       UI.toast(r.message, 'success');
-    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+    } catch (e) { UI.toast(e.message, 'error'); if (btn) btn.disabled = false; } finally { UI.loading(false); }
   },
   async remove(recordId) {
     if (!confirm('この記録と添付画像を削除します。よろしいですか？')) return;
@@ -1480,6 +1513,13 @@ const Social = {
     if (r.visibility !== '公開' && !this.of(r).comments) return '';
     const s = this.of(r);
     return `<p class="text-sm text-mute mt-2">🙋 あるある ${s.aruaru}　👍 いいね ${s.like}　💬 コメント ${s.comments}</p>`;
+  },
+  /** 履歴カードの公開スイッチ（デフォルト非公開） */
+  switchHtml(r) {
+    const pub = r.visibility === '公開';
+    return `<button type="button" class="vis-switch" role="switch" aria-checked="${pub}" aria-label="この記録をみんなに公開"
+      onclick="History.setVisibility('${esc(r.recordId)}', '${pub ? '非公開' : '公開'}', 'history', this)">
+      <span class="track"><span class="knob"></span></span><span>${pub ? '公開' : '非公開'}</span></button>`;
   },
   /** 詳細画面の公開設定ボックス */
   visibilityBox(r) {
