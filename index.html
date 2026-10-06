@@ -63,9 +63,6 @@
 
   .chip { border: 2px solid #D3DCE1; background: #fff; border-radius: 999px; padding: .45rem 1rem; font-weight: 500; min-height: 44px; }
   .chip[aria-pressed="true"] { background: #2F5D6B; border-color: #2F5D6B; color: #fff; }
-  .edit-label { display: block; font-weight: 700; margin-bottom: .4rem; }
-  .edit-sec { border-top: 2px dashed #D3DCE1; padding-top: 1rem; margin-top: 1rem; }
-  .is-dim { opacity: .45; pointer-events: none; }
 
   .btn-main { background: #2F5D6B; color: #fff; font-weight: 700; border-radius: 16px; min-height: 56px; padding: 0 1.25rem; }
   .btn-main:active { background: #244956; }
@@ -93,6 +90,17 @@
   /* 手書きパッド */
   #padCanvas { touch-action: none; background: #fff; cursor: crosshair; display: block; }
   .tool[aria-pressed="true"] { background: #2F5D6B; color: #fff; border-color: #2F5D6B; }
+
+  /* みんなのもやもや */
+  .react { display: inline-flex; align-items: center; gap: .35rem; border: 2px solid #D3DCE1; background: #fff; border-radius: 999px; padding: .3rem .9rem; min-height: 44px; font-weight: 700; color: #244956; transition: transform .1s, background .15s; }
+  .react:active { transform: scale(.95); }
+  .react[aria-pressed="true"] { background: #FCEFCB; border-color: #F2B134; color: #1C2833; }
+  .react:disabled { opacity: .55; }
+  .react .n { font-variant-numeric: tabular-nums; min-width: 1ch; text-align: center; }
+  .react.pop { animation: pop .35s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+  .cmt { background: #fff; border: 2px solid #E3E8EB; border-radius: 16px; padding: .75rem .9rem; }
+  .cmt.owner { border-color: #F2B134; }
 
   .modal-bg { background: rgba(28,40,51,.55); }
   .sheet { max-height: 92vh; overflow-y: auto; }
@@ -209,6 +217,12 @@
         <label class="block mt-5"><span class="block font-bold mb-2">いつ</span>
           <input id="occurredAt" type="datetime-local" class="field"></label>
 
+        <label class="flex items-start gap-3 mt-5 fogcard p-4 cursor-pointer">
+          <input id="publishNew" type="checkbox" class="w-6 h-6 mt-1 shrink-0 accent-[#2F5D6B]">
+          <span><span class="font-bold block">みんなに公開する（チェックしなければ非公開）</span>
+            <span class="text-sm text-mute leading-relaxed block">登録している人どうしで「それ、あるある」と楽しめます。表示名と記録の内容が公開されます（あとから記録ごとに非公開にできます）。</span></span>
+        </label>
+
         <button id="inferBtn" class="btn-main w-full mt-6 text-lg" onclick="Memo.infer()">AIに聞いてみる</button>
         <p class="text-center text-mute text-sm mt-2">文字・声・手書き・写真のどれか1つでも大丈夫です</p>
       </div>
@@ -240,6 +254,22 @@
       </div>
       <p id="historyCount" class="text-mute text-sm mt-3"></p>
       <div id="historyList" class="space-y-3 mt-2"></div>
+    </div>
+
+    <!-- ========== みんな ========== -->
+    <div id="tab-community" data-tab class="hidden">
+      <h2 class="text-2xl font-black mt-2 mb-1">みんなのもやもや</h2>
+      <p class="text-mute mb-3 leading-relaxed">公開された「なんだっけ」に「それ、あるある」「いいね」やコメントを。思い出せずに困っている人には、心当たりを教えてあげましょう。</p>
+      <div class="flex gap-2 overflow-x-auto pb-1" id="comFilters">
+        <button class="chip shrink-0" data-cf="all" aria-pressed="true">新着</button>
+        <button class="chip shrink-0" data-cf="unresolved" aria-pressed="false">思い出せない…</button>
+        <button class="chip shrink-0" data-cf="resolved" aria-pressed="false">思い出した！</button>
+        <button class="chip shrink-0" data-cf="mine" aria-pressed="false">自分の公開</button>
+      </div>
+      <input id="comSearch" class="field mt-2" type="search" placeholder="キーワードで探す（手がかり・答え・タグ）">
+      <p id="comCount" class="text-mute text-sm mt-3"></p>
+      <div id="comList" class="space-y-3 mt-2"></div>
+      <button id="comMore" class="btn-sub w-full mt-3 hidden" onclick="Community.load(false)">もっと見る</button>
     </div>
 
     <!-- ========== 傾向 ========== -->
@@ -285,7 +315,7 @@
 
   <!-- 下部タブ（片手操作） -->
   <nav class="tabbar fixed bottom-0 inset-x-0 z-30 bg-paper border-t border-[#D3DCE1]">
-    <div class="max-w-xl mx-auto grid grid-cols-3">
+    <div class="max-w-xl mx-auto grid grid-cols-4">
       <button class="tabbtn flex flex-col items-center py-2 text-mute font-bold" data-go="input" aria-current="page" onclick="UI.go('input')">
         <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
         <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
@@ -295,6 +325,11 @@
         <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
         <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
         <span class="text-sm">履歴</span>
+      </button>
+      <button class="tabbtn flex flex-col items-center py-2 text-mute font-bold" data-go="community" onclick="UI.go('community')">
+        <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
+        <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c2.8.3 5 2.6 5 5.8"/></svg>
+        <span class="text-sm">みんな</span>
       </button>
       <button class="tabbtn flex flex-col items-center py-2 text-mute font-bold" data-go="stats" onclick="UI.go('stats')">
         <span class="tab-ind w-8 h-1 rounded-full mb-1"></span>
@@ -419,7 +454,7 @@ function fmtDate(iso) {
 }
 function toLocalInput(iso) {
   const d = iso ? new Date(iso) : new Date();
-  if (isNaN(d)) return '';
+  if (isNaN(d)) return localNow();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 function localNow() {
@@ -491,6 +526,7 @@ const UI = {
     if (tab !== 'input') Voice.stop();
     if (tab === 'history') History.load();
     if (tab === 'stats') Stats.load();
+    if (tab === 'community') Community.load(true);
   },
 };
 
@@ -525,6 +561,7 @@ const Auth = {
   },
   clear() {
     S.token = ''; S.user = null; S.records = []; S.recordsLoaded = false;
+    Community.items = []; Community.stale = true;
     try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* noop */ }
   },
   async login(ev) {
@@ -1002,7 +1039,10 @@ const Memo = {
     UI.loading(true, msgs[0], msgs);
     $('inferBtn').disabled = true;
     try {
-      const r = await api('infer', { clues, situation: S.situation, occurredAt: occ, inputMethods: [...S.methods], images, voiceRaw: S.voiceRaw.join('\n') });
+      const visibility = $('publishNew').checked ? '公開' : '非公開';
+      const r = await api('infer', { clues, situation: S.situation, occurredAt: occ, inputMethods: [...S.methods], images, voiceRaw: S.voiceRaw.join('\n'), visibility });
+      r.record.social = Social.empty();
+      if (visibility === '公開') UI.toast('みんなに公開しました。', 'success');
       S.current = r.record;
       S.records.unshift(r.record);
       if (r.aiError) UI.toast('記録は保存しましたが、AIの推論に失敗しました: ' + r.aiError, 'error', 6000);
@@ -1021,6 +1061,7 @@ const Memo = {
     $('voiceRawText').textContent = '';
     $('voiceRawBox').classList.add('hidden');
     S.attach = []; S.methods = new Set(); S.situation = '';
+    $('publishNew').checked = false; // 公開は毎回オフ（デフォルト非公開）
     document.querySelectorAll('[data-sit]').forEach(x => x.setAttribute('aria-pressed', 'false'));
     $('occurredAt').value = localNow();
     this.renderAttach();
@@ -1132,7 +1173,10 @@ const Memo = {
       </div>
       ${rec.memoryHint ? `<div class="fogcard p-4 mt-4"><p class="font-bold mb-1">次に思い出すためのヒント</p><p class="text-lg leading-relaxed">${esc(rec.memoryHint)}</p></div>` : ''}
       <p class="text-mute mt-4">${rec.resolveMinutes != null ? `記録してから ${rec.resolveMinutes} 分で解決。` : ''}${rec.resolvedBy === 'AI候補' ? 'AIの候補から見つかりました。' : '自力で思い出しました。'}</p>
-      <button class="btn-sub w-full mt-5" onclick="Edit.open('${esc(rec.recordId)}', 'resolved')">分類や答えを直す</button>
+      ${rec.visibility === '公開'
+        ? `<p class="mt-4 bg-[#DCE8EC] rounded-2xl p-3 leading-relaxed">🌐 この記録はみんなに公開中です。「思い出した」ことも、みんなに伝わります。</p>`
+        : `<button class="btn-spark w-full mt-6" onclick="History.setVisibility('${esc(rec.recordId)}', '公開', 'resolved')">みんなに公開して「あるある」を集める</button>`}
+      <button class="btn-sub w-full mt-3" onclick="History.edit('${esc(rec.recordId)}', 'resolved')">答え・分類を直す</button>
       <button class="btn-main w-full mt-3" onclick="Memo.panel('entry')">次の「なんだっけ」を記録する</button>`;
     this.panel('resolved');
   },
@@ -1161,7 +1205,8 @@ const History = {
   },
   replace(rec) {
     const i = S.records.findIndex(r => r.recordId === rec.recordId);
-    if (i >= 0) S.records[i] = rec; else S.records.unshift(rec);
+    if (i >= 0) S.records[i] = Object.assign({ social: S.records[i].social }, rec);
+    else S.records.unshift(Object.assign({ social: Social.empty() }, rec));
   },
   filtered() {
     const q = $('searchBox').value.trim().toLowerCase();
@@ -1193,6 +1238,7 @@ const History = {
       <button class="block w-full text-left fogcard p-4" onclick="History.detail('${esc(r.recordId)}')">
         <div class="flex items-center gap-2 text-sm text-mute">
           <span>${fmtDate(r.occurredAt)}</span>
+          ${r.visibility === '公開' ? '<span class="rounded-full px-2 py-0.5 font-bold bg-tide text-white">公開</span>' : ''}
           <span class="ml-auto rounded-full px-2 py-0.5 font-bold ${r.status === '解決' ? 'bg-sparkSoft text-ink' : 'bg-[#D3DCE1] text-ink'}">${r.status === '解決' ? '解決' : '未解決'}</span>
         </div>
         <p class="text-xl font-black mt-1 break-words">${r.answer ? esc(r.answer) : '<span class="text-mute font-bold">まだ思い出せていない</span>'}</p>
@@ -1202,6 +1248,7 @@ const History = {
           ${this.methodBadges(r)}
           ${r.imageFileIds.map(id => `<img data-fid="${esc(id)}" class="thumb !w-12 !h-12" alt="">`).join('')}
         </div>
+        ${Social.summary(r)}
       </button>`).join('');
     this.loadThumbs($('historyList'));
   },
@@ -1227,12 +1274,15 @@ const History = {
     const r = S.records.find(x => x.recordId === recordId);
     if (!r) return;
     const unresolved = r.status !== '解決';
+    const pub = r.visibility === '公開';
+    const showThread = pub || ((r.social && r.social.comments) > 0);
     $('detailBody').innerHTML = `
       <div class="flex items-center justify-between mb-2">
         <p class="text-mute">${fmtDate(r.occurredAt)}${r.situation ? '・' + esc(r.situation) : ''}</p>
         <button class="w-11 h-11 rounded-full bg-fog font-black" aria-label="閉じる" onclick="UI.closeModal('detailModal')">×</button>
       </div>
       ${r.answer ? `<div class="rounded-2xl bg-spark p-4 mb-3"><p class="text-2xl font-black break-words">${esc(r.answer)}</p><p class="font-bold mt-1">${esc(r.category)}${r.subCategory ? '／' + esc(r.subCategory) : ''}</p></div>` : ''}
+      ${Social.visibilityBox(r)}
       <p class="font-bold">手がかり</p>
       <p class="whitespace-pre-wrap leading-relaxed mb-3">${esc(r.clues || '（画像のみ）')}</p>
       <div class="flex flex-wrap gap-2 mb-3">${this.methodBadges(r)}</div>
@@ -1243,6 +1293,7 @@ const History = {
       ${r.tags.length ? `<div class="flex flex-wrap gap-2 mb-3">${r.tags.map(t => `<span class="bg-fog rounded-full px-3 py-1 text-sm">#${esc(t)}</span>`).join('')}</div>` : ''}
       ${r.memoryHint ? `<div class="bg-sparkSoft rounded-2xl p-3 mb-3"><span class="font-bold">覚え方：</span>${esc(r.memoryHint)}</div>` : ''}
       ${r.resolveMinutes != null ? `<p class="text-mute mb-3">解決まで ${r.resolveMinutes} 分（${esc(r.resolvedBy)}）</p>` : ''}
+      <button class="btn-sub w-full mb-4" onclick="History.edit('${esc(r.recordId)}')">${unresolved ? '手がかり・場面・日時を直す' : '答え・分類・内容を直す'}</button>
       ${unresolved ? `
         <p class="font-bold mt-2 mb-2">AIの候補</p>
         <div class="space-y-3">${Memo.candidateHtml(r, 'History.pick')}</div>
@@ -1252,11 +1303,15 @@ const History = {
           <button class="btn-spark" onclick="History.manual('${esc(r.recordId)}')">確定</button>
         </div>
         <button class="btn-sub w-full mt-3" onclick="History.continueRefine('${esc(r.recordId)}')">手がかりを足してAIに聞き直す</button>` : ''}
-      ${r.updatedAt ? `<p class="text-sm text-mute mt-3">最終修正 ${fmtDate(r.updatedAt)}</p>` : ''}
-      <button class="btn-sub w-full mt-4" onclick="Edit.open('${esc(r.recordId)}', 'detail')">この記録を修正する</button>
-      <button class="w-full mt-3 py-3 text-rec font-bold underline underline-offset-4" onclick="History.remove('${esc(r.recordId)}')">この記録を削除</button>`;
+      ${showThread ? `<div class="border-t-2 border-[#E3E8EB] mt-5 pt-4">
+        <p class="font-bold mb-2">みんなの反応</p>
+        <div class="flex flex-wrap gap-2" data-rx="${esc(r.recordId)}">${Social.reactInner(r, true)}</div>
+        ${Thread.html(r, pub)}
+      </div>` : ''}
+      <button class="w-full mt-5 py-3 text-rec font-bold underline underline-offset-4" onclick="History.remove('${esc(r.recordId)}')">この記録を削除</button>`;
     UI.openModal('detailModal');
     this.loadThumbs($('detailBody'));
+    if (showThread) Thread.load(r.recordId);
   },
   pick(recordId, idx) {
     const r = S.records.find(x => x.recordId === recordId);
@@ -1274,12 +1329,141 @@ const History = {
     UI.go('input');
     Memo.showResult(r, null);
   },
+  /* ---------- 記録の修正 ---------- */
+  edit(recordId, from) {
+    const r = S.records.find(x => x.recordId === recordId);
+    if (!r) return;
+    Voice.cancel();
+    const resolved = r.status === '解決';
+    const cats = (!r.category || CATEGORIES.includes(r.category)) ? CATEGORIES : CATEGORIES.concat([r.category]);
+    const sits = (!r.situation || SITUATIONS.includes(r.situation)) ? SITUATIONS : SITUATIONS.concat([r.situation]);
+    const idq = esc(r.recordId), fromq = esc(from || '');
+    $('detailBody').innerHTML = `
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-xl font-black">記録を修正</h3>
+        <button type="button" class="w-11 h-11 rounded-full bg-fog font-black" aria-label="閉じる" onclick="History.cancelEdit('${idq}', '${fromq}')">×</button>
+      </div>
+      <form id="editForm" class="space-y-4" onsubmit="History.saveEdit(event, '${idq}', '${fromq}')">
+        ${resolved ? `
+          <label class="block"><span class="block font-bold mb-1">答え</span>
+            <input class="field" name="answer" maxlength="200" value="${esc(r.answer)}" required></label>
+          <div>
+            <p class="font-bold mb-2">カテゴリ</p>
+            <div class="flex flex-wrap gap-2" id="editCats">${cats.map(c =>
+              `<button type="button" class="chip" data-cat="${esc(c)}" aria-pressed="${c === r.category}">${esc(c)}</button>`).join('')}</div>
+            <input type="hidden" name="category" value="${esc(r.category || '')}">
+          </div>
+          <label class="block"><span class="block font-bold mb-1">サブカテゴリ</span>
+            <input class="field" name="subCategory" maxlength="50" value="${esc(r.subCategory)}" placeholder="例：俳優、映画、植物"></label>
+          <label class="block"><span class="block font-bold mb-1">タグ（「,」か「、」で区切る）</span>
+            <input class="field" name="tags" maxlength="300" value="${esc((r.tags || []).join('、'))}" placeholder="例：刑事ドラマ、昭和"></label>
+          <label class="block"><span class="block font-bold mb-1">覚え方ヒント</span>
+            <textarea class="field clue-area !min-h-[4.5rem]" name="memoryHint" maxlength="500">${esc(r.memoryHint)}</textarea></label>`
+        : `<p class="bg-sparkSoft rounded-xl p-3 leading-relaxed">まだ未解決の記録です。答えは詳細画面の「AIの候補」か「自分で思い出した」から確定してください。</p>`}
+        <label class="block"><span class="block font-bold mb-1">場面</span>
+          <select class="field" name="situation"><option value="">（なし）</option>${sits.map(s =>
+            `<option ${s === r.situation ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+        <label class="block"><span class="block font-bold mb-1">いつ</span>
+          <input class="field" type="datetime-local" name="occurredAt" value="${toLocalInput(r.occurredAt || r.createdAt)}"></label>
+        <label class="block"><span class="block font-bold mb-1">手がかり</span>
+          <textarea class="field clue-area" name="clues" maxlength="2000">${esc(r.clues)}</textarea>
+          <span class="block text-sm text-mute mt-1">手がかりを直しても、AIの候補は自動では出し直しません。</span></label>
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" class="btn-sub" onclick="History.cancelEdit('${idq}', '${fromq}')">やめる</button>
+          <button type="submit" class="btn-main">保存する</button>
+        </div>
+        ${resolved ? `<button type="button" class="w-full py-3 text-rec font-bold underline underline-offset-4" onclick="History.reopen('${idq}', '${fromq}')">解決を取り消して未解決に戻す</button>` : ''}
+      </form>`;
+    const cw = $('editCats');
+    if (cw) cw.addEventListener('click', e => {
+      const b = e.target.closest('[data-cat]');
+      if (!b) return;
+      cw.querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', x === b));
+      $('editForm').category.value = b.dataset.cat;
+    });
+    UI.openModal('detailModal');
+    $('detailBody').scrollTop = 0;
+  },
+  cancelEdit(recordId, from) {
+    if (from === 'resolved') UI.closeModal('detailModal');
+    else this.detail(recordId);
+  },
+  applyPatch(recordId, patch) {
+    const r = S.records.find(x => x.recordId === recordId);
+    if (r) Object.assign(r, patch);
+    if (S.current && S.current.recordId === recordId && S.current !== r) Object.assign(S.current, patch);
+    this.render();
+    if (!$('tab-stats').classList.contains('hidden')) Stats.render();
+    return r || S.current;
+  },
+  afterEdit(rec, from) {
+    if (from === 'resolved') {
+      UI.closeModal('detailModal');
+      if (rec.status === '解決') Memo.showResolved(rec);
+      else { S.current = rec; Memo.showResult(rec, null); }
+    } else {
+      this.detail(rec.recordId);
+    }
+  },
+  async saveEdit(ev, recordId, from) {
+    ev.preventDefault();
+    const f = ev.target;
+    const r = S.records.find(x => x.recordId === recordId);
+    if (!r) return;
+    const fields = {
+      situation: f.situation.value,
+      occurredAt: f.occurredAt.value ? new Date(f.occurredAt.value).toISOString() : (r.occurredAt || ''),
+      clues: f.clues.value.trim(),
+    };
+    if (r.status === '解決') {
+      fields.answer = f.answer.value.trim();
+      fields.category = f.category.value;
+      fields.subCategory = f.subCategory.value.trim();
+      fields.tags = f.tags.value.split(/[,、，]/).map(t => t.replace(/^#/, '').trim()).filter(Boolean);
+      fields.memoryHint = f.memoryHint.value.trim();
+      if (!fields.answer) return UI.toast('答えを入力してください。', 'error');
+      if (!fields.category) return UI.toast('カテゴリを選んでください。', 'error');
+    }
+    if (!fields.clues && !(r.imageFileIds || []).length) return UI.toast('手がかりが空になります。何か入力してください。', 'error');
+    UI.loading(true, '保存しています…');
+    try {
+      const res = await api('updateRecord', { recordId, fields });
+      const rec = this.applyPatch(recordId, res.patch);
+      this.afterEdit(rec, from);
+      UI.toast('修正しました。', 'success');
+    } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
+  },
+  async reopen(recordId, from) {
+    if (!confirm('答えと分類を消して「未解決」に戻します。よろしいですか？')) return;
+    UI.loading(true, '未解決に戻しています…');
+    try {
+      const res = await api('updateRecord', { recordId, reopen: true });
+      const rec = this.applyPatch(recordId, res.patch);
+      this.afterEdit(rec, from);
+      UI.toast('未解決に戻しました。');
+    } catch (e) { UI.toast(e.message, 'error', 5000); } finally { UI.loading(false); }
+  },
+  async setVisibility(recordId, visibility, from) {
+    if (visibility === '公開' && !confirm('表示名と、この記録の内容（手がかり・答え・画像など）が登録者全員に公開されます。公開しますか？')) return;
+    UI.loading(true, visibility === '公開' ? '公開しています…' : '非公開にしています…');
+    try {
+      const r = await api('setVisibility', { recordId, visibility });
+      const rec = this.applyPatch(recordId, r.record);
+      Community.stale = true;
+      if (visibility !== '公開') Community.items = Community.items.filter(x => x.recordId !== recordId);
+      if (from === 'resolved') Memo.showResolved(rec);
+      else if (from === 'community') { UI.closeModal('detailModal'); Community.render(); }
+      else this.detail(recordId);
+      UI.toast(r.message, 'success');
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+  },
   async remove(recordId) {
     if (!confirm('この記録と添付画像を削除します。よろしいですか？')) return;
     UI.loading(true, '削除しています…');
     try {
       await api('deleteRecord', { recordId });
       S.records = S.records.filter(r => r.recordId !== recordId);
+      Community.items = Community.items.filter(x => x.recordId !== recordId);
       UI.closeModal('detailModal');
       this.render();
       UI.toast('削除しました。');
@@ -1287,159 +1471,280 @@ const History = {
   },
 };
 
-/* ============================ 記録の修正 ============================ */
-const Edit = {
-  recordId: null, origin: 'detail', category: '', situation: '',
-  open(recordId, origin) {
-    const r = S.records.find(x => x.recordId === recordId);
-    if (!r) return UI.toast('記録が見つかりません。履歴を読み込み直してください。', 'error');
-    Voice.cancel();
-    this.recordId = recordId;
-    this.origin = origin || 'detail';
-    this.category = r.category || '';
-    this.situation = r.situation || '';
-    const chips = (list, cur, attr) => list.map(v =>
-      `<button type="button" class="chip" ${attr}="${esc(v)}" aria-pressed="${v === cur}">${esc(v)}</button>`).join('');
-    $('detailBody').innerHTML = `
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-xl font-black">記録を修正</h3>
-        <button class="w-11 h-11 rounded-full bg-fog font-black" aria-label="閉じる" onclick="Edit.cancel()">×</button>
-      </div>
-
-      <label class="block"><span class="edit-label">正解（思い出した答え）</span>
-        <input id="editAnswer" class="field" value="${esc(r.answer)}" placeholder="まだ思い出せていなければ空のまま" maxlength="200"></label>
-      <p id="editUnresolveNote" class="hidden mt-2 text-sm bg-sparkSoft rounded-xl p-3"></p>
-
-      <div id="editClassBox" class="edit-sec">
-        <div class="flex items-center justify-between gap-2 mb-2">
-          <span class="font-bold">分類</span>
-          <button type="button" class="btn-sub !min-h-[44px] text-sm" onclick="Edit.reclassify()">AIに分類し直してもらう</button>
-        </div>
-        <span class="edit-label text-sm text-mute !font-normal">カテゴリ</span>
-        <div id="editCatChips" class="flex flex-wrap gap-2">${chips(CATEGORIES, this.category, 'data-ecat')}</div>
-        <label class="block mt-4"><span class="edit-label">サブカテゴリ</span>
-          <input id="editSub" class="field" value="${esc(r.subCategory)}" placeholder="例：俳優、映画、植物" maxlength="50"></label>
-        <label class="block mt-4"><span class="edit-label">タグ（「、」か「,」で区切る）</span>
-          <input id="editTags" class="field" value="${esc(r.tags.join('、'))}" placeholder="例：刑事ドラマ、昭和"></label>
-        <label class="block mt-4"><span class="edit-label">覚え方ヒント</span>
-          <textarea id="editHint" class="field !min-h-[4.5rem] leading-relaxed" maxlength="200">${esc(r.memoryHint)}</textarea></label>
-        <div id="editByBox" class="mt-4">
-          <span class="edit-label">解決方法</span>
-          <div class="flex gap-2">${chips(['AI候補', '自力'], r.resolvedBy || '自力', 'data-eby')}</div>
-        </div>
-      </div>
-
-      <div class="edit-sec">
-        <span class="edit-label">どんな場面で</span>
-        <div id="editSitChips" class="flex flex-wrap gap-2">${chips(SITUATIONS, this.situation, 'data-esit')}</div>
-        <label class="block mt-4"><span class="edit-label">いつ</span>
-          <input id="editOccurred" type="datetime-local" class="field" value="${toLocalInput(r.occurredAt || r.createdAt)}"></label>
-        <label class="block mt-4"><span class="edit-label">手がかり</span>
-          <textarea id="editClues" class="field clue-area">${esc(r.clues)}</textarea></label>
-      </div>
-
-      <div class="grid grid-cols-2 gap-2 mt-6">
-        <button type="button" class="btn-sub" onclick="Edit.cancel()">やめる</button>
-        <button type="button" class="btn-main" id="editSaveBtn" onclick="Edit.save()">保存する</button>
-      </div>`;
-
-    const wire = (boxId, attr, key) => $(boxId).addEventListener('click', e => {
-      const b = e.target.closest(`[${attr}]`);
-      if (!b) return;
-      const on = b.getAttribute('aria-pressed') !== 'true';
-      $(boxId).querySelectorAll(`[${attr}]`).forEach(x => x.setAttribute('aria-pressed', 'false'));
-      // 解決方法は必ずどちらか1つ
-      if (key === 'resolvedBy') { b.setAttribute('aria-pressed', 'true'); return; }
-      b.setAttribute('aria-pressed', on);
-      this[key] = on ? b.getAttribute(attr) : '';
-    });
-    wire('editCatChips', 'data-ecat', 'category');
-    wire('editSitChips', 'data-esit', 'situation');
-    wire('editByBox', 'data-eby', 'resolvedBy');
-    $('editAnswer').addEventListener('input', () => this.syncAnswer());
-    this.wasResolved = r.status === '解決';
-    this.syncAnswer();
-    UI.openModal('detailModal');
-    $('detailModal').firstElementChild.scrollTop = 0;
+/* ============================ 公開・反応（共通） ============================ */
+const Social = {
+  empty() { return { aruaru: 0, like: 0, comments: 0, mine: { aruaru: false, like: false } }; },
+  of(rec) { return (rec && rec.social) || this.empty(); },
+  /** 履歴カードの反応数 */
+  summary(r) {
+    if (r.visibility !== '公開' && !this.of(r).comments) return '';
+    const s = this.of(r);
+    return `<p class="text-sm text-mute mt-2">🙋 あるある ${s.aruaru}　👍 いいね ${s.like}　💬 コメント ${s.comments}</p>`;
   },
-  syncAnswer() {
-    const has = !!$('editAnswer').value.trim();
-    $('editClassBox').classList.toggle('is-dim', !has);
-    $('editClassBox').setAttribute('aria-disabled', String(!has));
-    $('editByBox').classList.toggle('hidden', !this.wasResolved);
-    const note = $('editUnresolveNote');
-    if (!has && this.wasResolved) {
-      note.textContent = '正解を空にして保存すると「未解決」に戻り、分類・タグ・覚え方ヒントも消えます。';
-      note.classList.remove('hidden');
-    } else if (has && !this.wasResolved) {
-      note.textContent = '保存すると「解決（自力）」になります。カテゴリを選ばなければAIが分類します。';
-      note.classList.remove('hidden');
-    } else {
-      note.classList.add('hidden');
+  /** 詳細画面の公開設定ボックス */
+  visibilityBox(r) {
+    const pub = r.visibility === '公開';
+    const id = esc(r.recordId);
+    return `<div class="flex items-center gap-3 rounded-2xl ${pub ? 'bg-[#DCE8EC]' : 'bg-fog'} p-3 mb-3">
+      <div class="flex-1 min-w-0">
+        <p class="font-bold">${pub ? '🌐 みんなに公開中' : '🔒 非公開（自分だけ）'}</p>
+        <p class="text-sm text-mute leading-relaxed">${pub ? '「あるある」「いいね」やコメントが付きます' : '公開すると、登録者どうしで楽しめます'}</p>
+      </div>
+      <button class="btn-sub !min-h-[44px] text-sm shrink-0" onclick="History.setVisibility('${id}', '${pub ? '非公開' : '公開'}')">${pub ? '非公開にする' : '公開する'}</button>
+    </div>`;
+  },
+  /** あるある・いいね・コメントのボタン群 */
+  reactInner(rec, isMine) {
+    const s = this.of(rec);
+    const id = esc(rec.recordId);
+    const dis = isMine || rec.visibility !== '公開' ? 'disabled' : '';
+    const tip = isMine ? ' title="自分の記録には付けられません"' : '';
+    return `<button class="react" ${dis}${tip} aria-pressed="${!!s.mine.aruaru}" data-type="aruaru" onclick="event.stopPropagation(); Community.react('${id}', 'aruaru', this)">🙋 それ、あるある <span class="n">${s.aruaru}</span></button>
+      <button class="react" ${dis}${tip} aria-pressed="${!!s.mine.like}" data-type="like" onclick="event.stopPropagation(); Community.react('${id}', 'like', this)">👍 いいね <span class="n">${s.like}</span></button>
+      <span class="inline-flex items-center px-2 text-mute font-bold">💬 ${s.comments}</span>`;
+  },
+  /** 反応数が変わったら、一覧・詳細・履歴のすべてに反映 */
+  update(recordId, social) {
+    const item = Community.items.find(x => x.recordId === recordId);
+    if (item) item.social = social;
+    const own = S.records.find(x => x.recordId === recordId);
+    if (own) own.social = social;
+    const rec = item || own;
+    if (!rec) return;
+    const isMine = item ? item.isMine : true;
+    document.querySelectorAll(`[data-rx="${recordId}"]`).forEach(el => { el.innerHTML = this.reactInner(rec, isMine); });
+  },
+};
+
+/* ============================ みんなのもやもや ============================ */
+const Community = {
+  filter: 'all', items: [], offset: 0, hasMore: false, total: 0, busy: false, stale: true, _t: null,
+  init() {
+    $('comFilters').addEventListener('click', e => {
+      const b = e.target.closest('[data-cf]');
+      if (!b) return;
+      this.filter = b.dataset.cf;
+      document.querySelectorAll('[data-cf]').forEach(x => x.setAttribute('aria-pressed', x === b));
+      this.load(true);
+    });
+    $('comSearch').addEventListener('input', () => {
+      clearTimeout(this._t);
+      this._t = setTimeout(() => this.load(true), 500);
+    });
+  },
+  async load(reset) {
+    if (this.busy) return;
+    this.busy = true;
+    if (reset) {
+      this.offset = 0;
+      if (!this.items.length || this.stale) $('comList').innerHTML = '<p class="text-mute">読み込んでいます…</p>';
+    }
+    $('comMore').disabled = true;
+    try {
+      const r = await api('listPublic', { filter: this.filter, q: $('comSearch').value.trim(), offset: reset ? 0 : this.offset });
+      this.items = reset ? r.items : this.items.concat(r.items);
+      this.offset = r.nextOffset; this.hasMore = r.hasMore; this.total = r.total;
+      this.stale = false;
+      this.render();
+    } catch (e) {
+      $('comList').innerHTML = `<div class="fogcard p-4"><p>${esc(e.message)}</p><button class="btn-sub mt-3" onclick="Community.load(true)">再読み込み</button></div>`;
+    } finally {
+      this.busy = false;
+      $('comMore').disabled = false;
     }
   },
-  async reclassify() {
-    const answer = $('editAnswer').value.trim();
-    if (!answer) return UI.toast('先に正解を入力してください。', 'error');
-    UI.loading(true, 'AIが分類し直しています…');
+  catLine(it) {
+    return it.category ? `<p class="text-sm text-tide font-bold">${esc(it.category)}${it.subCategory ? '／' + esc(it.subCategory) : ''}</p>` : '';
+  },
+  card(it) {
+    const id = esc(it.recordId);
+    const done = it.status === '解決';
+    return `
+      <article class="fogcard p-4">
+        <div class="flex items-center gap-2 text-sm text-mute">
+          <span class="font-bold text-ink truncate">${esc(it.author)}${it.isMine ? '（あなた）' : ''}</span>
+          <span class="shrink-0">${fmtDate(it.occurredAt)}</span>
+          <span class="ml-auto shrink-0 rounded-full px-2 py-0.5 font-bold ${done ? 'bg-sparkSoft text-ink' : 'bg-[#FBE9EB] text-rec'}">${done ? '思い出した！' : '思い出せない…'}</span>
+        </div>
+        <button class="block w-full text-left mt-1" onclick="Community.detail('${id}')">
+          ${done
+            ? `<p class="text-xl font-black break-words">${esc(it.answer)}</p>${this.catLine(it)}`
+            : `<p class="text-lg font-black text-tideDark">これ、なんだっけ？</p>`}
+          <p class="mt-2 leading-relaxed line-clamp-3">${esc(it.clues || it.aiInterpretation || '（画像のみ）')}</p>
+          ${it.imageFileIds.length ? `<div class="flex gap-2 mt-2">${it.imageFileIds.map(f => `<img data-fid="${esc(f)}" class="thumb !w-14 !h-14" alt="">`).join('')}</div>` : ''}
+          ${!done ? '<p class="text-sm text-tide font-bold mt-2">心当たりがあればコメントで教えてあげましょう →</p>' : ''}
+        </button>
+        <div class="flex flex-wrap items-center gap-2 mt-3" data-rx="${id}">${Social.reactInner(it, it.isMine)}</div>
+      </article>`;
+  },
+  render() {
+    const list = this.items;
+    const labels = { all: '公開中', unresolved: '思い出せない記録', resolved: '思い出した記録', mine: 'あなたが公開した記録' };
+    $('comCount').textContent = this.total ? `${labels[this.filter]} ${this.total} 件` : '';
+    $('comMore').classList.toggle('hidden', !this.hasMore);
+    if (!list.length) {
+      const msg = this.filter === 'mine'
+        ? 'まだ公開した記録はありません。履歴の記録を開いて「公開する」を押すと、ここに並びます。'
+        : $('comSearch').value.trim() ? '条件に合う記録はありません。' : 'まだ公開された記録はありません。あなたの「なんだっけ」を最初に公開してみませんか？';
+      $('comList').innerHTML = `<div class="fogcard p-5 leading-relaxed text-mute">${esc(msg)}</div>`;
+      return;
+    }
+    $('comList').innerHTML = list.map(it => this.card(it)).join('');
+    History.loadThumbs($('comList'));
+  },
+  detail(recordId) {
+    const it = this.items.find(x => x.recordId === recordId);
+    if (!it) return;
+    const id = esc(it.recordId);
+    const done = it.status === '解決';
+    $('detailBody').innerHTML = `
+      <div class="flex items-center justify-between mb-2 gap-2">
+        <div class="min-w-0">
+          <p class="font-bold truncate">${esc(it.author)}${it.isMine ? '（あなた）' : ''} さんの「なんだっけ」</p>
+          <p class="text-mute text-sm">${fmtDate(it.occurredAt)}${it.situation ? '・' + esc(it.situation) : ''}</p>
+        </div>
+        <button class="w-11 h-11 shrink-0 rounded-full bg-fog font-black" aria-label="閉じる" onclick="UI.closeModal('detailModal')">×</button>
+      </div>
+      ${done
+        ? `<div class="rounded-2xl bg-spark p-4 mb-3"><p class="text-sm font-bold">思い出した！</p><p class="text-2xl font-black break-words">${esc(it.answer)}</p><p class="font-bold mt-1">${esc(it.category)}${it.subCategory ? '／' + esc(it.subCategory) : ''}</p></div>`
+        : `<div class="rounded-2xl bg-[#FBE9EB] p-4 mb-3"><p class="text-xl font-black text-rec">まだ思い出せていません</p><p class="text-sm mt-1 leading-relaxed">心当たりがあれば、コメントで教えてあげてください。</p></div>`}
+      <p class="font-bold">手がかり</p>
+      <p class="whitespace-pre-wrap leading-relaxed mb-3">${esc(it.clues || '（画像のみ）')}</p>
+      ${it.imageFileIds.length ? `<div class="grid grid-cols-2 gap-2 mb-3">${it.imageFileIds.map((f, i) => `<img data-fid="${esc(f)}" class="w-full aspect-square object-cover rounded-xl bg-fog" alt="${it.imageKinds[i] === 'handwriting' ? '手書き画像' : '写真'}">`).join('')}</div>` : ''}
+      ${!done && it.aiInterpretation ? `<p class="font-bold">AIの解釈</p><p class="leading-relaxed mb-3">${esc(it.aiInterpretation)}</p>` : ''}
+      ${it.tags.length ? `<div class="flex flex-wrap gap-2 mb-3">${it.tags.map(t => `<span class="bg-fog rounded-full px-3 py-1 text-sm">#${esc(t)}</span>`).join('')}</div>` : ''}
+      ${it.memoryHint ? `<div class="bg-sparkSoft rounded-2xl p-3 mb-3"><span class="font-bold">覚え方：</span>${esc(it.memoryHint)}</div>` : ''}
+      <div class="flex flex-wrap gap-2 mt-2" data-rx="${id}">${Social.reactInner(it, it.isMine)}</div>
+      ${it.isMine ? `<div class="grid grid-cols-2 gap-2 mt-3">
+        <button class="btn-sub" onclick="UI.closeModal('detailModal'); Community.openOwn('${id}')">自分の記録を開く</button>
+        <button class="btn-sub" onclick="History.setVisibility('${id}', '非公開', 'community')">非公開にする</button></div>` : ''}
+      ${Thread.html(it, true)}`;
+    UI.openModal('detailModal');
+    $('detailBody').scrollTop = 0;
+    History.loadThumbs($('detailBody'));
+    Thread.load(it.recordId);
+  },
+  async openOwn(recordId) {
+    if (!S.recordsLoaded) await History.load(true);
+    History.detail(recordId);
+  },
+  async react(recordId, type, btn) {
+    if (btn) { btn.disabled = true; btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop'); }
     try {
-      const r = await api('reclassify', { recordId: this.recordId, answer, clues: $('editClues').value, situation: this.situation });
-      const c = r.classification;
-      this.category = c.category;
-      $('editCatChips').querySelectorAll('[data-ecat]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.ecat === c.category)));
-      $('editSub').value = c.subCategory || '';
-      $('editTags').value = (c.tags || []).join('、');
-      $('editHint').value = c.memoryHint || '';
-      UI.toast('分類案を入れました。よければ「保存する」を押してください。', 'success', 4200);
+      const r = await api('toggleReaction', { recordId, type });
+      Social.update(recordId, r.social);
+    } catch (e) {
+      UI.toast(e.message, 'error');
+      if (btn) btn.disabled = false;
+    }
+  },
+};
+
+/* ============================ コメント ============================ */
+const Thread = {
+  recordId: '', comments: [], editing: '', canPost: false,
+  html(rec, canPost) {
+    this.canPost = canPost;
+    const unresolved = rec.status !== '解決';
+    return `
+      <section class="mt-5">
+        <p class="font-bold mb-2">コメント</p>
+        <div id="threadList" class="space-y-2"><p class="text-mute">読み込んでいます…</p></div>
+        ${canPost ? `
+          <div class="mt-3">
+            <textarea id="threadInput" class="field clue-area !min-h-[4.5rem]" maxlength="500" placeholder="${unresolved ? '例：それ、〇〇じゃないですか？ 私も同じことがありました' : '例：わかります！ 私もこの前まったく同じことが…'}"></textarea>
+            <button class="btn-main w-full mt-2" id="threadSend" onclick="Thread.add()">コメントする</button>
+          </div>`
+        : '<p class="text-mute text-sm mt-2">非公開のため、新しいコメントは付きません。これまでのコメントは修正・削除できます。</p>'}
+      </section>`;
+  },
+  async load(recordId) {
+    this.recordId = recordId; this.editing = ''; this.comments = [];
+    try {
+      const r = await api('getComments', { recordId });
+      if (this.recordId === recordId) this.set(r);
+    } catch (e) {
+      const el = $('threadList');
+      if (el) el.innerHTML = `<p class="text-rec">${esc(e.message)}</p>`;
+    }
+  },
+  set(r) {
+    if (r.comments) this.comments = r.comments;
+    if (r.social) Social.update(this.recordId, r.social);
+    this.render();
+  },
+  render() {
+    const el = $('threadList');
+    if (!el) return;
+    if (!this.comments.length) {
+      el.innerHTML = `<p class="text-mute">${this.canPost ? 'まだコメントはありません。最初のひとことをどうぞ。' : 'コメントはありません。'}</p>`;
+      return;
+    }
+    el.innerHTML = this.comments.map(c => this.item(c)).join('');
+  },
+  item(c) {
+    const id = esc(c.commentId);
+    if (this.editing === c.commentId) {
+      return `<div class="cmt">
+        <textarea id="editCmt" class="field clue-area !min-h-[4.5rem]" maxlength="500">${esc(c.text)}</textarea>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <button class="btn-sub !min-h-[44px]" onclick="Thread.cancelEdit()">やめる</button>
+          <button class="btn-main !min-h-[44px]" onclick="Thread.saveEdit('${id}')">保存する</button>
+        </div></div>`;
+    }
+    return `<div class="cmt ${c.isRecordOwner ? 'owner' : ''}">
+      <div class="flex items-center gap-2 text-sm flex-wrap">
+        <span class="font-bold">${esc(c.author)}${c.isMine ? '（あなた）' : ''}</span>
+        ${c.isRecordOwner ? '<span class="rounded-full bg-sparkSoft px-2 text-xs font-bold">記録した人</span>' : ''}
+        <span class="text-mute">${fmtDate(c.createdAt)}${c.edited ? (c.editedByOwner ? '（記録した人が修正）' : '（修正済み）') : ''}</span>
+      </div>
+      <p class="whitespace-pre-wrap leading-relaxed mt-1 break-words">${esc(c.text)}</p>
+      ${c.canEdit ? `<div class="flex gap-4 mt-1 text-sm">
+        <button class="text-tide underline underline-offset-4 py-1" onclick="Thread.startEdit('${id}')">修正</button>
+        <button class="text-rec underline underline-offset-4 py-1" onclick="Thread.remove('${id}')">削除</button>
+      </div>` : ''}
+    </div>`;
+  },
+  syncCount() {
+    const s = Object.assign({}, Social.of(Community.items.find(x => x.recordId === this.recordId) || S.records.find(x => x.recordId === this.recordId)));
+    s.comments = this.comments.length;
+    Social.update(this.recordId, s);
+  },
+  async add() {
+    const input = $('threadInput');
+    const text = input.value.trim();
+    if (!text) return UI.toast('コメントを入力してください。', 'error');
+    $('threadSend').disabled = true;
+    try {
+      const r = await api('addComment', { recordId: this.recordId, text });
+      input.value = '';
+      this.set(r);
+      UI.toast(r.message, 'success');
+    } catch (e) { UI.toast(e.message, 'error'); } finally { $('threadSend').disabled = false; }
+  },
+  startEdit(commentId) { this.editing = commentId; this.render(); const t = $('editCmt'); if (t) t.focus(); },
+  cancelEdit() { this.editing = ''; this.render(); },
+  async saveEdit(commentId) {
+    const text = $('editCmt').value.trim();
+    if (!text) return UI.toast('コメントが空です。消す場合は「削除」を押してください。', 'error');
+    UI.loading(true, '保存しています…');
+    try {
+      const r = await api('editComment', { commentId, text });
+      this.editing = '';
+      if (r.comments) this.set(r);
+      else { const c = this.comments.find(x => x.commentId === commentId); if (c) { c.text = text; c.edited = true; } this.render(); }
+      UI.toast(r.message, 'success');
     } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
-  async save() {
-    const answer = $('editAnswer').value.trim();
-    const clues = $('editClues').value.trim();
-    const r = S.records.find(x => x.recordId === this.recordId);
-    if (!clues && !(r && r.imageFileIds.length)) return UI.toast('手がかりを入力してください。', 'error');
-    if (!answer && this.wasResolved && !confirm('正解を空にすると「未解決」に戻り、分類も消えます。よろしいですか？')) return;
-    const occ = $('editOccurred').value;
-    const byBtn = $('editByBox').querySelector('[data-eby][aria-pressed="true"]');
-    const fields = {
-      answer,
-      category: this.category,
-      subCategory: $('editSub').value,
-      tags: $('editTags').value,
-      memoryHint: $('editHint').value,
-      situation: this.situation,
-      clues,
-    };
-    if (occ) fields.occurredAt = new Date(occ).toISOString();
-    if (this.wasResolved && byBtn) fields.resolvedBy = byBtn.dataset.eby;
-
-    $('editSaveBtn').disabled = true;
-    UI.loading(true, answer && !this.category ? '保存して分類しています…' : '保存しています…');
+  async remove(commentId) {
+    if (!confirm('このコメントを削除します。よろしいですか？')) return;
+    UI.loading(true, '削除しています…');
     try {
-      const res = await api('updateRecord', { recordId: this.recordId, fields });
-      const rec = res.record;
-      History.replace(rec);
-      if (S.current && S.current.recordId === rec.recordId) S.current = rec;
-      History.render();
-      if (!$('tab-stats').classList.contains('hidden')) Stats.render();
-      UI.toast('修正を保存しました。', 'success');
-      if (this.origin === 'resolved') {
-        UI.closeModal('detailModal');
-        if (rec.status === '解決') Memo.showResolved(rec);
-        else { S.current = rec; Memo.showResult(rec, null); }
-      } else {
-        History.detail(rec.recordId);
-      }
-    } catch (e) {
-      UI.toast(e.message, 'error', 5000);
-    } finally {
-      UI.loading(false);
-      if ($('editSaveBtn')) $('editSaveBtn').disabled = false;
-    }
-  },
-  cancel() {
-    if (this.origin === 'resolved') UI.closeModal('detailModal');
-    else History.detail(this.recordId);
+      const r = await api('deleteComment', { commentId });
+      if (r.comments) this.set(r);
+      else { this.comments = this.comments.filter(x => x.commentId !== commentId); this.render(); this.syncCount(); }
+      UI.toast(r.message);
+    } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   },
 };
 
@@ -1583,6 +1888,7 @@ const App = {
     initEyes();
     Pad.init();
     Memo.init();
+    Community.init();
     $('catFilter').innerHTML += CATEGORIES.map(c => `<option>${esc(c)}</option>`).join('');
     const setOnline = () => $('offlineBanner').classList.toggle('hidden', navigator.onLine);
     window.addEventListener('online', setOnline);
